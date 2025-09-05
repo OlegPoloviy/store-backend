@@ -4,7 +4,7 @@ import {
   NotFoundException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
-import { CreateProductDTO } from './DTO/create-product.dto';
+import { CreateProductDTO } from '../DTO/create-product.dto';
 import { DmsService } from 'src/dms/dms.service';
 
 @Injectable()
@@ -100,7 +100,34 @@ export class ProductsService {
       return product;
     } catch (error) {
       console.error(error);
-      throw new InternalServerErrorException(error);
+      throw new NotFoundException(error);
+    }
+  }
+
+  async getProductById(id: string) {
+    try {
+      const product = await this.prisma.product.findUnique({
+        where: { id },
+        include: {
+          category: true,
+          images: true,
+        },
+      });
+
+      return product;
+    } catch (error) {
+      console.error(error);
+      throw new NotFoundException(error);
+    }
+  }
+
+  async getCategories() {
+    try {
+      const categories = await this.prisma.category.findMany();
+      return categories;
+    } catch (error) {
+      console.error(error);
+      throw new NotFoundException(error);
     }
   }
 }

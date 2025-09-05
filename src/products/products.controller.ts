@@ -12,7 +12,7 @@ import {
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ProductsService } from './products.service';
-import { CreateProductDTO } from './DTO/create-product.dto';
+import { CreateProductDTO } from '../DTO/create-product.dto';
 
 @Controller('products')
 export class ProductsController {
@@ -30,7 +30,7 @@ export class ProductsController {
     @UploadedFiles(
       new ParseFilePipe({
         validators: [
-          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }), // 5MB
+          new MaxFileSizeValidator({ maxSize: 5 * 1024 * 1024 }),
           new FileTypeValidator({ fileType: '.(jpg|jpeg|png|webp)' }),
         ],
         fileIsRequired: false,
@@ -41,10 +41,15 @@ export class ProductsController {
     return this.productsService.createProduct(data, files);
   }
 
-  @Get('/:category')
+  @Get('/category/:category')
   async getProductsByCategory(
     @Param('category') category: string,
   ): Promise<any> {
     return this.productsService.getProductsByCategory(category);
+  }
+
+  @Get('/id/:id')
+  async getProductById(@Param('id') id: string): Promise<any> {
+    return this.productsService.getProductById(id);
   }
 }

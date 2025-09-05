@@ -35,6 +35,7 @@ model Product {
 model Category {
   id       String     @id @default(uuid())
   name     String     @unique
+  categoryImage String?
   products Product[]
 }
 

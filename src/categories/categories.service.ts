@@ -6,10 +6,14 @@ import {
 import { PrismaService } from '../prisma/prisma.service';
 import { CreateCategoryDTO } from 'src/DTO/create-category.dto';
 import { CategoryResponseDTO } from 'src/DTO/category-response.dto';
+import { DmsService } from 'src/dms/dms.service';
 
 @Injectable()
 export class CategoriesService {
-  constructor(private prisma: PrismaService) {}
+  constructor(
+    private prisma: PrismaService,
+    private dms: DmsService,
+  ) {}
 
   async getCategories() {
     try {
@@ -21,16 +25,25 @@ export class CategoriesService {
     }
   }
 
-  async createCategory(data: CreateCategoryDTO): Promise<CategoryResponseDTO> {
+  async createCategory(
+    data: CreateCategoryDTO,
+    categoryImageFile?: Express.Multer.File,
+  ): Promise<CategoryResponseDTO> {
     try {
+      const uploaded = categoryImageFile
+        ? await this.dms.uploadSingleFile(categoryImageFile)
+        : null;
       const category = await this.prisma.category.create({
-        data,
-        select: { id: true, name: true, categoryImage: true },
+        data: {
+          name: data.name,
+          categoryImage: uploaded?.url ?? null,
+        },
+        select: { id: true, name: true },
       });
       return {
         id: category.id,
         name: category.name,
-        categoryImage: category.categoryImage || null,
+        categoryImage: uploaded?.url || null,
       };
     } catch (error) {
       console.error(error);

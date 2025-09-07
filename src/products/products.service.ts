@@ -14,6 +14,17 @@ export class ProductsService {
     private dms: DmsService,
   ) {}
 
+  private async uploadProductImages(
+    files: Express.Multer.File[],
+  ): Promise<string[]> {
+    if (!files || files.length === 0) {
+      return [];
+    }
+    const uploadPromises = files.map((file) => this.dms.uploadSingleFile(file));
+    const uploadResults = await Promise.all(uploadPromises);
+    return uploadResults.map((result) => result.url);
+  }
+
   async getAllProducts() {
     try {
       const products = await this.prisma.product.findMany({
@@ -32,13 +43,7 @@ export class ProductsService {
     try {
       let imageUrls: string[] = [];
 
-      if (files && files.length > 0) {
-        const uploadPromises = files.map((file) =>
-          this.dms.uploadSingleFile(file),
-        );
-        const uploadResults = await Promise.all(uploadPromises);
-        imageUrls = uploadResults.map((result) => result.url);
-      }
+      imageUrls = await this.uploadProductImages(files);
 
       const productData: any = {
         title: data.title,
@@ -53,15 +58,12 @@ export class ProductsService {
         },
       };
 
-      // Only add images if we have any
-      if (imageUrls.length > 0) {
-        productData.images = {
-          create: imageUrls.map((url) => ({
-            url,
-            altText: data.title,
-          })),
-        };
-      }
+      productData.images = {
+        create: imageUrls.map((url) => ({
+          url,
+          altText: data.title,
+        })),
+      };
 
       const createdProduct = await this.prisma.product.create({
         data: productData,

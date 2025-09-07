@@ -17,19 +17,53 @@ datasource db {
 
 
 model Product {
-  id          String          @id @default(uuid())
-  title       String
-  description String?
-  price       Decimal         @db.Decimal(10, 2)
-  currency    String          @db.VarChar(10)
-  material    String?
-  createdAt   DateTime        @default(now())
-  updatedAt   DateTime        @updatedAt
+  id                    String          @id @default(uuid())
+  title                 String
+  description           String?         @db.Text // Може бути довший опис
+  price                 Decimal         @db.Decimal(10, 2)
+  currency              String          @db.VarChar(10)
+
+  // Нові поля для матеріалів та виробництва
+  primaryMaterial       String?         // Дуб, Бук, Ялина
+  secondaryMaterials    String[]        // @db.String[] - Якщо Prisma підтримує масиви, інакше JSON або окрема таблиця
+  woodTreatment         String?         // Натуральне масло, Лак
+  finish                String?         // Матовий, Глянцевий
+  originOfMaterial      String?         // Карпатська деревина
+  handmade              Boolean         @default(true) // Зазвичай true для кастомних
+  craftsmanshipDetails  String[]        // Різьблення, Інкрустація
+
+  width                 Decimal?        @db.Decimal(10, 2)
+  depth                 Decimal?        @db.Decimal(10, 2)
+  height                Decimal?        @db.Decimal(10, 2)
+  unitOfMeasure         String?         @db.VarChar(10) 
+  weight                Decimal?        @db.Decimal(10, 2)
+  weightUnit            String?         @db.VarChar(10) 
+  seatingCapacity       Int?
+  storageCapacity       String?         
+
+  style                 String?       
+  color                 String?         
+  texture               String?        
+  designInspiration     String?
+  pattern               String?
+
+  features              String[]        
+  assemblyRequired      Boolean?
+  careInstructions      String?         @db.Text
+  warranty              String?
+
+  uniqueIdentifier      String?         @unique 
+  designer              String?
+  creationDate          DateTime?      
+  story                 String?         @db.Text
+
+  createdAt             DateTime        @default(now())
+  updatedAt             DateTime        @updatedAt
 
   // Relations
-  category    Category        @relation(fields: [categoryId], references: [id])
-  categoryId  String
-  images      ProductImage[]
+  category              Category        @relation(fields: [categoryId], references: [id])
+  categoryId            String
+  images                ProductImage[]
 }
 
 model Category {

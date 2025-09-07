@@ -6,6 +6,7 @@ import {
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateProductDTO } from '../DTO/create-product.dto';
 import { DmsService } from 'src/dms/dms.service';
+import type { Express } from 'express';
 
 @Injectable()
 export class ProductsService {

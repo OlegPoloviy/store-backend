@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { CreateCategoryDTO } from 'src/DTO/create-category.dto';
 import { CategoryResponseDTO } from 'src/DTO/category-response.dto';
 import { DmsService } from 'src/dms/dms.service';
+import type { Express } from 'express';
 
 @Injectable()
 export class CategoriesService {

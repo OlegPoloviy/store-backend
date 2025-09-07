@@ -19,18 +19,17 @@ datasource db {
 model Product {
   id                    String          @id @default(uuid())
   title                 String
-  description           String?         @db.Text // Може бути довший опис
+  description           String?         @db.Text 
   price                 Decimal         @db.Decimal(10, 2)
   currency              String          @db.VarChar(10)
 
-  // Нові поля для матеріалів та виробництва
-  primaryMaterial       String?         // Дуб, Бук, Ялина
-  secondaryMaterials    String[]        // @db.String[] - Якщо Prisma підтримує масиви, інакше JSON або окрема таблиця
-  woodTreatment         String?         // Натуральне масло, Лак
-  finish                String?         // Матовий, Глянцевий
-  originOfMaterial      String?         // Карпатська деревина
-  handmade              Boolean         @default(true) // Зазвичай true для кастомних
-  craftsmanshipDetails  String[]        // Різьблення, Інкрустація
+  primaryMaterial       String?         
+  secondaryMaterials    String[]        
+  woodTreatment         String?         
+  finish                String?         
+  originOfMaterial      String?       
+  handmade              Boolean         @default(true) 
+  craftsmanshipDetails  String[]       
 
   width                 Decimal?        @db.Decimal(10, 2)
   depth                 Decimal?        @db.Decimal(10, 2)

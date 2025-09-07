@@ -10,6 +10,7 @@ import { FileInterceptor } from '@nestjs/platform-express';
 import { CategoriesService } from './categories.service';
 import { CreateCategoryDTO } from 'src/DTO/create-category.dto';
 import { CategoryResponseDTO } from 'src/DTO/category-response.dto';
+import type { Express } from 'express';
 
 @Controller('categories')
 export class CategoriesController {

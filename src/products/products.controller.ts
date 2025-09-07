@@ -13,6 +13,7 @@ import {
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ProductsService } from './products.service';
 import { CreateProductDTO } from '../DTO/create-product.dto';
+import type { Express } from 'express';
 
 @Controller('products')
 export class ProductsController {

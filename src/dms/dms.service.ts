@@ -7,6 +7,7 @@ import {
   GetObjectCommand,
 } from '@aws-sdk/client-s3';
 import { v4 as uuidv4 } from 'uuid';
+import { Express } from 'express';
 
 @Injectable()
 export class DmsService {

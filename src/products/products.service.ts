@@ -7,6 +7,7 @@ import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateProductDTO } from '../DTO/create-product.dto';
 import { DmsService } from 'src/dms/dms.service';
 import type { Express } from 'express';
+import { Prisma } from 'generated/prisma';
 
 @Injectable()
 export class ProductsService {
@@ -42,28 +43,25 @@ export class ProductsService {
 
   async createProduct(data: CreateProductDTO, files?: Express.Multer.File[]) {
     try {
-      let imageUrls: string[] = [];
+      const imageUrls = await this.uploadProductImages(files);
 
-      imageUrls = await this.uploadProductImages(files);
+      // Витягуємо category окремо, бо для неї connectOrCreate
+      const { category, ...rest } = data;
 
-      const productData: any = {
-        title: data.title,
-        description: data.description,
-        price: data.price,
-        currency: data.currency,
+      const productData: Prisma.ProductCreateInput = {
+        ...rest, // тут залетять всі інші поля, які збігаються з Product
         category: {
           connectOrCreate: {
-            where: { name: data.category },
-            create: { name: data.category },
+            where: { name: category },
+            create: { name: category },
           },
         },
-      };
-
-      productData.images = {
-        create: imageUrls.map((url) => ({
-          url,
-          altText: data.title,
-        })),
+        images: {
+          create: imageUrls.map((url) => ({
+            url,
+            altText: data.title,
+          })),
+        },
       };
 
       const createdProduct = await this.prisma.product.create({

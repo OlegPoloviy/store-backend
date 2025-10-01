@@ -83,3 +83,19 @@ model ProductImage {
   product   Product  @relation(fields: [productId], references: [id])
   productId String
 }
+
+
+model User {
+  id    String  @id @default(uuid())
+  firstName String
+  lastName  String
+  email    String  @unique
+  phone  String
+  password String
+
+  //Location data
+  adress  String
+  city    String
+  postalCode Int
+  country  String
+}

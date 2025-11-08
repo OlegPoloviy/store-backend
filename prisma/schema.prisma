@@ -15,6 +15,10 @@ datasource db {
   directUrl = env("DIRECT_URL")
 }
 
+enum user_role {
+  ADMIN
+  USER
+}
 
 model Product {
   id                    String          @id @default(uuid())
@@ -92,10 +96,14 @@ model User {
   email    String  @unique
   phone  String
   password String
+  role    user_role @default(USER)
 
   //Location data
-  adress  String
+  address  String
   city    String
   postalCode Int
   country  String
+
+  createdAt DateTime @default(now())
+  updatedAt DateTime @updatedAt
 }

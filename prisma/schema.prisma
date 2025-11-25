@@ -67,6 +67,8 @@ model Product {
   category              Category        @relation(fields: [categoryId], references: [id])
   categoryId            String
   images                ProductImage[]
+  favorites             Favorite[]
+  cartItems             CartItem[]
 }
 
 model Category {
@@ -106,4 +108,61 @@ model User {
 
   createdAt DateTime @default(now())
   updatedAt DateTime @updatedAt
+
+  // Relations
+  favorites Favorite[]
+  carts     Cart[]
+}
+
+model Cart {
+  id           String      @id @default(uuid())
+  userId       String?     
+  anonymousId  String?     
+  status       CartStatus  @default(ACTIVE)
+  items        CartItem[]
+  user         User?       @relation(fields: [userId], references: [id])
+
+  createdAt    DateTime    @default(now())
+  updatedAt    DateTime    @updatedAt
+
+  @@index([userId])
+  @@index([anonymousId])
+}
+
+model CartItem {
+  id            String   @id @default(uuid())
+  cartId        String
+  productId     String
+  quantity      Int      @default(1)
+  priceSnapshot Decimal  @db.Decimal(10,2)  // збережена ціна на момент додавання
+
+  cart          Cart     @relation(fields: [cartId], references: [id])
+  product       Product  @relation(fields: [productId], references: [id])
+
+  createdAt     DateTime @default(now())
+
+  @@index([cartId])
+  @@index([productId])
+  @@unique([cartId, productId]) // щоб уникнути дублювання товарів
+}
+
+model Favorite {
+  id         String   @id @default(uuid())
+  userId     String
+  productId  String
+
+  user       User     @relation(fields: [userId], references: [id])
+  product    Product  @relation(fields: [productId], references: [id])
+
+  createdAt  DateTime @default(now())
+
+  @@index([userId])
+  @@index([productId])
+  @@unique([userId, productId]) // один товар — один раз у favorites
+}
+
+enum CartStatus {
+  ACTIVE
+  CHECKED_OUT
+  EXPIRED
 }

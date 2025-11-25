@@ -2,6 +2,8 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
+  ConflictException,
+  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateProductDTO } from '../DTO/create-product.dto';
@@ -45,11 +47,10 @@ export class ProductsService {
     try {
       const imageUrls = await this.uploadProductImages(files);
 
-      // Витягуємо category окремо, бо для неї connectOrCreate
       const { category, ...rest } = data;
 
       const productData: Prisma.ProductCreateInput = {
-        ...rest, // тут залетять всі інші поля, які збігаються з Product
+        ...rest,
         category: {
           connectOrCreate: {
             where: { name: category },
@@ -129,6 +130,133 @@ export class ProductsService {
     } catch (error) {
       console.error(error);
       throw new NotFoundException(error);
+    }
+  }
+
+  async addToFavorite(userId: string, productId: string) {
+    try {
+      // Verify user exists
+      const user = await this.prisma.user.findUnique({
+        where: { id: userId },
+      });
+
+      if (!user) {
+        throw new NotFoundException(`User with ID ${userId} not found`);
+      }
+
+      // Verify product exists
+      const product = await this.prisma.product.findUnique({
+        where: { id: productId },
+      });
+
+      if (!product) {
+        throw new NotFoundException(`Product with ID ${productId} not found`);
+      }
+
+      // Check if favorite already exists
+      const existingFavorite = await this.prisma.favorite.findUnique({
+        where: {
+          userId_productId: {
+            userId,
+            productId,
+          },
+        },
+      });
+
+      if (existingFavorite) {
+        throw new ConflictException('Product is already in favorites');
+      }
+
+      // Create favorite
+      const favorite = await this.prisma.favorite.create({
+        data: {
+          userId,
+          productId,
+        },
+        include: {
+          product: {
+            include: {
+              category: true,
+              images: true,
+            },
+          },
+        },
+      });
+
+      return favorite;
+    } catch (error) {
+      if (
+        error instanceof NotFoundException ||
+        error instanceof ConflictException
+      ) {
+        throw error;
+      }
+      console.error('Add to favorite error:', error);
+      throw new InternalServerErrorException(
+        `Failed to add product to favorites: ${error.message}`,
+      );
+    }
+  }
+
+  async removeFromFavorites(userId: string, productId: string) {
+    try {
+      const favorite = await this.prisma.favorite.findUnique({
+        where: {
+          userId_productId: {
+            userId,
+            productId,
+          },
+        },
+      });
+
+      if (!favorite) {
+        throw new NotFoundException(
+          'Product is not in favorites or favorite not found',
+        );
+      }
+
+      // Delete the favorite
+      await this.prisma.favorite.delete({
+        where: {
+          userId_productId: {
+            userId,
+            productId,
+          },
+        },
+      });
+
+      return { message: 'Product removed from favorites successfully' };
+    } catch (error) {
+      if (error instanceof NotFoundException) {
+        throw error;
+      }
+      console.error('Remove from favorite error:', error);
+      throw new InternalServerErrorException(
+        `Failed to remove product from favorites: ${error.message}`,
+      );
+    }
+  }
+
+  async getFavoriteStatus(userId: string, productId: string) {
+    try {
+      const favorite = await this.prisma.favorite.findUnique({
+        where: {
+          userId_productId: {
+            userId,
+            productId,
+          },
+        },
+      });
+
+      return {
+        isFavorite: !!favorite,
+        productId,
+      };
+    } catch (error) {
+      console.error('Get favorite status error:', error);
+      throw new InternalServerErrorException(
+        `Failed to get favorite status: ${error.message}`,
+      );
     }
   }
 }

@@ -4,14 +4,17 @@ import {
   Post,
   Body,
   Param,
+  Query,
   UseInterceptors,
   UploadedFiles,
   ParseFilePipe,
   MaxFileSizeValidator,
   FileTypeValidator,
   UseGuards,
-  Delete,
+  Request,
   BadRequestException,
+  UnauthorizedException,
+  Delete,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ProductsService } from './products.service';
@@ -45,10 +48,6 @@ export class ProductsController {
     )
     files?: Express.Multer.File[],
   ): Promise<any> {
-    if (!dataString) {
-      throw new BadRequestException('Product data is required');
-    }
-
     // Parse the JSON string to get the CreateProductDTO object
     const productData: CreateProductDTO = JSON.parse(dataString);
 
@@ -67,9 +66,63 @@ export class ProductsController {
     return this.productsService.getProductById(id);
   }
 
-  @UseGuards(AuthGuard('jwt'), AdminGuard)
-  @Delete('/:id')
-  async deleteProduct(@Param('id') id: string) {
-    return this.productsService.deleteProduct(id);
+  @UseGuards(AuthGuard('jwt'))
+  @Post('/favorite')
+  async addToFavorite(
+    @Request() req: any,
+    @Body() body: { productId: string },
+  ) {
+    const user = req.user;
+    const userId = user?.sub || user?.user_id || user?.id;
+
+    if (!userId) {
+      throw new UnauthorizedException('User ID not found in token');
+    }
+
+    if (!body.productId) {
+      throw new BadRequestException('Product ID is required');
+    }
+
+    return this.productsService.addToFavorite(userId, body.productId);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Delete('/favorite')
+  async removeFromFavorites(
+    @Request() req: any,
+    @Body() body: { productId: string },
+  ) {
+    const user = req.user;
+    const userId = user?.sub || user?.user_id || user?.id;
+
+    if (!userId) {
+      throw new UnauthorizedException('User ID not found in token');
+    }
+
+    if (!body.productId) {
+      throw new BadRequestException('Product ID is required');
+    }
+
+    return this.productsService.removeFromFavorites(userId, body.productId);
+  }
+
+  @UseGuards(AuthGuard('jwt'))
+  @Get('/favorite/status/:productId')
+  async getFavoriteStatus(
+    @Request() req: any,
+    @Param('productId') productId: string,
+  ) {
+    const user = req.user;
+    const userId = user?.sub || user?.user_id || user?.id;
+
+    if (!userId) {
+      throw new UnauthorizedException('User ID not found in token');
+    }
+
+    if (!productId) {
+      throw new BadRequestException('Product ID is required');
+    }
+
+    return this.productsService.getFavoriteStatus(userId, productId);
   }
 }

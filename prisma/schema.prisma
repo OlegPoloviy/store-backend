@@ -69,6 +69,8 @@ model Product {
   images                ProductImage[]
   favorites             Favorite[]
   cartItems             CartItem[]
+
+  collectionItems CollectionItem[]
 }
 
 model Category {
@@ -112,6 +114,7 @@ model User {
   // Relations
   favorites Favorite[]
   carts     Cart[]
+  collections Collection[]
 }
 
 model Cart {
@@ -159,6 +162,35 @@ model Favorite {
   @@index([userId])
   @@index([productId])
   @@unique([userId, productId]) // один товар — один раз у favorites
+}
+
+model Collection {
+  id        String   @id @default(uuid())
+  userId    String
+  name      String
+  
+
+  isPrivate Boolean  @default(false) 
+  
+  createdAt DateTime @default(now())
+
+  user      User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  collectionItems CollectionItem[]
+}
+
+model CollectionItem {
+  id           String   @id @default(uuid())
+  collectionId String
+  productId    String
+  addedAt      DateTime @default(now())
+
+  product      Product    @relation(fields: [productId], references: [id], onDelete: Cascade)
+  
+  collection   Collection @relation(fields: [collectionId], references: [id], onDelete: Cascade)
+
+
+  @@unique([collectionId, productId])
 }
 
 enum CartStatus {

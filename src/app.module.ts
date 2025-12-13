@@ -7,6 +7,8 @@ import { DmsModule } from './dms/dms.module';
 import { CategoriesModule } from './categories/categories.module';
 import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
+import { FavoritesModule } from './favorites/favorites.module';
+import { CollectionsModule } from './collections/collections.module';
 
 @Module({
   imports: [
@@ -16,6 +18,8 @@ import { AuthModule } from './auth/auth.module';
     CategoriesModule,
     AuthModule,
     UserModule,
+    FavoritesModule,
+    CollectionsModule,
   ],
   controllers: [AppController],
   providers: [AppService],

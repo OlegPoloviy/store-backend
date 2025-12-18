@@ -29,15 +29,33 @@ export class ProductsService {
     return uploadResults.map((result) => result.url);
   }
 
-  async getAllProducts() {
+  // --- ОНОВЛЕНИЙ МЕТОД ---
+  // Додаємо аргумент userId? (опціональний)
+  async getAllProducts(userId?: string) {
     try {
       const products = await this.prisma.product.findMany({
         include: {
           category: true,
           images: true,
+          favorites: userId
+            ? {
+                where: { userId },
+              }
+            : false,
         },
       });
-      return products;
+
+      // Мапимо результат, додаючи поле isFavorite
+      return products.map((product) => {
+        const isFavorite = !!(
+          product.favorites && product.favorites.length > 0
+        );
+        const { favorites, ...rest } = product;
+        return {
+          ...rest,
+          isFavorite,
+        };
+      });
     } catch (error) {
       throw new NotFoundException(error);
     }
@@ -46,9 +64,7 @@ export class ProductsService {
   async createProduct(data: CreateProductDTO, files?: Express.Multer.File[]) {
     try {
       const imageUrls = await this.uploadProductImages(files);
-
       const { seatingCapacity, category, ...rest } = data;
-
       const transformed = Number(seatingCapacity);
 
       const productData: Prisma.ProductCreateInput = {
@@ -85,9 +101,10 @@ export class ProductsService {
     }
   }
 
-  async getProductsByCategory(category: string) {
+  // --- ОНОВЛЕНИЙ МЕТОД ---
+  async getProductsByCategory(category: string, userId?: string) {
     try {
-      const product = await this.prisma.product.findMany({
+      const products = await this.prisma.product.findMany({
         where: {
           category: {
             name: {
@@ -99,39 +116,54 @@ export class ProductsService {
         include: {
           category: true,
           images: true,
+          // Перевірка favorites
+          favorites: userId ? { where: { userId } } : false,
         },
       });
 
-      return product;
+      return products.map((product) => {
+        const isFavorite = product.favorites && product.favorites.length > 0;
+        const { favorites, ...rest } = product;
+        return { ...rest, isFavorite };
+      });
     } catch (error) {
       console.error(error);
       throw new NotFoundException(error);
     }
   }
 
-  async getProductById(id: string) {
+  // --- ОНОВЛЕНИЙ МЕТОД ---
+  async getProductById(id: string, userId?: string) {
     try {
       const product = await this.prisma.product.findUnique({
         where: { id },
         include: {
           category: true,
           images: true,
+          // Перевірка favorites
+          favorites: userId ? { where: { userId } } : false,
         },
       });
 
-      return product;
+      if (!product) throw new NotFoundException('Product not found');
+
+      const isFavorite = product.favorites && product.favorites.length > 0;
+      const { favorites, ...rest } = product;
+
+      return {
+        ...rest,
+        isFavorite,
+      };
     } catch (error) {
       console.error(error);
-      throw new NotFoundException(error);
+      throw new NotFoundException(error); // Або re-throw, якщо error вже HTTP exception
     }
   }
 
   async deleteProduct(id: string) {
     try {
       await this.prisma.product.delete({
-        where: {
-          id,
-        },
+        where: { id },
       });
     } catch (error) {
       throw new InternalServerErrorException(

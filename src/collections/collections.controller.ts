@@ -6,6 +6,7 @@ import {
   Request,
   Get,
   UnauthorizedException,
+  Param,
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { CollectionInputDTO } from 'src/DTO/collection.dto';
@@ -37,5 +38,29 @@ export class CollectionsController {
     const userId = user?.sub || user?.user_id || user?.id;
 
     return this.collectionsService.getColletions(userId);
+  }
+
+  @Post('/item')
+  async addItem(
+    @Request() req,
+    @Body() body: { collectionId: string; itemId: string },
+  ) {
+    const user = req.user;
+    const userId = user?.sub || user?.user_id || user?.id;
+
+    const { collectionId, itemId } = body;
+
+    return this.collectionsService.addItem(userId, collectionId, itemId);
+  }
+
+  @Get('/:collectionId/items')
+  async getItemsByCollection(
+    @Request() req,
+    @Param('collectionId') collectionid: string,
+  ) {
+    const user = req.user;
+    const userId = user?.sub || user?.user_id || user?.id;
+
+    return this.collectionsService.getItemsByCollection(userId, collectionid);
   }
 }

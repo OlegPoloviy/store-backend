@@ -9,6 +9,7 @@ import { UserModule } from './user/user.module';
 import { AuthModule } from './auth/auth.module';
 import { FavoritesModule } from './favorites/favorites.module';
 import { CollectionsModule } from './collections/collections.module';
+import { CartModule } from './cart/cart.module';
 
 @Module({
   imports: [
@@ -20,6 +21,7 @@ import { CollectionsModule } from './collections/collections.module';
     UserModule,
     FavoritesModule,
     CollectionsModule,
+    CartModule,
   ],
   controllers: [AppController],
   providers: [AppService],

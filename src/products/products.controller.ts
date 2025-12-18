@@ -15,21 +15,27 @@ import {
   BadRequestException,
   UnauthorizedException,
   Delete,
+  Req,
 } from '@nestjs/common';
 import { FilesInterceptor } from '@nestjs/platform-express';
 import { ProductsService } from './products.service';
 import { CreateProductDTO } from '../DTO/create-product.dto';
 import { AuthGuard } from '@nestjs/passport';
 import { AdminGuard } from 'src/guards/admin.guard';
+import { OptionalJwtAuthGuard } from 'src/guards/optional.guard';
 import type { Express } from 'express';
 
 @Controller('products')
 export class ProductsController {
   constructor(private productsService: ProductsService) {}
 
+  @UseGuards(OptionalJwtAuthGuard)
   @Get()
-  async getAllProducts(): Promise<any> {
-    return this.productsService.getAllProducts();
+  async getAllProducts(@Req() req: any): Promise<any> {
+    const user = req.user;
+    const userId = user?.sub || user?.user_id || user?.id;
+
+    return this.productsService.getAllProducts(userId);
   }
 
   @UseGuards(AuthGuard('jwt'), AdminGuard)
@@ -54,75 +60,24 @@ export class ProductsController {
     return this.productsService.createProduct(productData, files);
   }
 
+  @UseGuards(OptionalJwtAuthGuard)
   @Get('/category/:category')
   async getProductsByCategory(
+    @Req() req,
     @Param('category') category: string,
   ): Promise<any> {
-    return this.productsService.getProductsByCategory(category);
+    const user = req.user;
+    const userId = user?.sub || user?.user_id || user?.id;
+
+    return this.productsService.getProductsByCategory(category, userId);
   }
 
+  @UseGuards(OptionalJwtAuthGuard)
   @Get('/id/:id')
-  async getProductById(@Param('id') id: string): Promise<any> {
-    return this.productsService.getProductById(id);
-  }
-
-  @UseGuards(AuthGuard('jwt'))
-  @Post('/favorite')
-  async addToFavorite(
-    @Request() req: any,
-    @Body() body: { productId: string },
-  ) {
+  async getProductById(@Req() req, @Param('id') id: string): Promise<any> {
     const user = req.user;
     const userId = user?.sub || user?.user_id || user?.id;
 
-    if (!userId) {
-      throw new UnauthorizedException('User ID not found in token');
-    }
-
-    if (!body.productId) {
-      throw new BadRequestException('Product ID is required');
-    }
-
-    return this.productsService.addToFavorite(userId, body.productId);
-  }
-
-  @UseGuards(AuthGuard('jwt'))
-  @Delete('/favorite')
-  async removeFromFavorites(
-    @Request() req: any,
-    @Body() body: { productId: string },
-  ) {
-    const user = req.user;
-    const userId = user?.sub || user?.user_id || user?.id;
-
-    if (!userId) {
-      throw new UnauthorizedException('User ID not found in token');
-    }
-
-    if (!body.productId) {
-      throw new BadRequestException('Product ID is required');
-    }
-
-    return this.productsService.removeFromFavorites(userId, body.productId);
-  }
-
-  @UseGuards(AuthGuard('jwt'))
-  @Get('/favorite/status/:productId')
-  async getFavoriteStatus(
-    @Request() req: any,
-    @Param('productId') productId: string,
-  ) {
-    const user = req.user;
-    const userId = user?.sub || user?.user_id || user?.id;
-
-    if (!userId) {
-      throw new UnauthorizedException('User ID not found in token');
-    }
-
-    if (!productId) {
-      throw new BadRequestException('Product ID is required');
-    }
-
-    return this.productsService.getFavoriteStatus(userId, productId);
+    return this.productsService.getProductById(id, userId);
   }
 }

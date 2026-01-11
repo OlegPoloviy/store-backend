@@ -1,5 +1,5 @@
-import { Injectable } from '@nestjs/common';
-import { InjectBot } from 'nestjs-telegraf';
+// import { Injectable } from '@nestjs/common';
+// import { InjectBot } from 'nestjs-telegraf';
 
-@Injectable()
-export class SupportChatService {}
+// @Injectable()
+// export class SupportChatService {}

@@ -122,9 +122,9 @@ export class CartService {
   async removeItem(
     userId: string | null,
     anonymousId: string | null,
-    productId: string,
+    cartItemId: string,
   ) {
-    if (!productId) {
+    if (!cartItemId) {
       throw new BadRequestException('No product id!');
     }
 
@@ -147,10 +147,60 @@ export class CartService {
 
     await this.prismaService.cartItem.deleteMany({
       where: {
-        cartId: cart.id,
-        productId,
+        id: cartItemId,
       },
     });
+
+    return this.getCart(userId, anonymousId);
+  }
+
+  async updateItemQuantity(
+    userId: string | null,
+    anonymousId: string | null,
+    itemId: string,
+    action: string,
+  ) {
+    const whereInput: Prisma.CartWhereInput = userId
+      ? { userId, status: 'ACTIVE' }
+      : { anonymousId: anonymousId!, status: 'ACTIVE' };
+
+    const cart = await this.prismaService.cart.findFirst({
+      where: whereInput,
+      select: { id: true },
+    });
+
+    if (!cart) {
+      return { items: [], total: 0 };
+    }
+
+    const cartItem = await this.prismaService.cartItem.findFirst({
+      where: {
+        id: itemId,
+        cartId: cart.id,
+      },
+    });
+
+    if (!cartItem) {
+      return this.getCart(userId, anonymousId);
+    }
+
+    if (action === 'increment') {
+      await this.prismaService.cartItem.update({
+        where: { id: itemId },
+        data: { quantity: { increment: 1 } },
+      });
+    } else if (action === 'decrement') {
+      if (cartItem.quantity > 1) {
+        await this.prismaService.cartItem.update({
+          where: { id: itemId },
+          data: { quantity: { decrement: 1 } },
+        });
+      } else {
+        await this.prismaService.cartItem.delete({
+          where: { id: itemId },
+        });
+      }
+    }
 
     return this.getCart(userId, anonymousId);
   }

@@ -10,6 +10,7 @@ import { AuthModule } from './auth/auth.module';
 import { FavoritesModule } from './favorites/favorites.module';
 import { CollectionsModule } from './collections/collections.module';
 import { CartModule } from './cart/cart.module';
+import { SupportChatModule } from './support-chat/support-chat.module';
 
 @Module({
   imports: [
@@ -22,6 +23,7 @@ import { CartModule } from './cart/cart.module';
     FavoritesModule,
     CollectionsModule,
     CartModule,
+    SupportChatModule,
   ],
   controllers: [AppController],
   providers: [AppService],

@@ -8,6 +8,7 @@ import {
   Get,
   Delete,
   Param,
+  Patch,
 } from '@nestjs/common';
 import { CartService } from './cart.service';
 import { AuthGuard } from '@nestjs/passport';
@@ -47,15 +48,34 @@ export class CartController {
   }
 
   @UseGuards(OptionalJwtAuthGuard)
-  @Delete('items/:productId')
+  @Delete('items/:itemId')
   async removeCartItem(
-    @Param('productId') productId: string,
+    @Param('itemId') itemId: string,
     @Headers('x-anonymous-id') anonymousId: string,
     @Req() req: any,
   ) {
     const user = req.user;
     const userId = user?.sub || user?.user_id || user?.id;
 
-    return this.cartService.removeItem(userId, anonymousId, productId);
+    return this.cartService.removeItem(userId, anonymousId, itemId);
+  }
+
+  @UseGuards(OptionalJwtAuthGuard)
+  @Patch('items/:itemId/quantity')
+  async updateQuantity(
+    @Param('itemId') itemId: string,
+    @Headers('x-anonymous-id') anonymousId: string,
+    @Body() body: { action: 'increase' | 'decrease' }, // Очікуємо дію в тілі запиту
+    @Req() req: any,
+  ) {
+    const user = req.user;
+    const userId = user?.sub || user?.user_id || user?.id;
+
+    return this.cartService.updateItemQuantity(
+      userId,
+      anonymousId,
+      itemId,
+      body.action,
+    );
   }
 }

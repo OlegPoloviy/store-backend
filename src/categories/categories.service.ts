@@ -32,7 +32,7 @@ export class CategoriesService {
   ): Promise<CategoryResponseDTO> {
     try {
       const uploaded = categoryImageFile
-        ? await this.dms.uploadSingleFile(categoryImageFile)
+        ? await this.dms.uploadSingleFile(categoryImageFile, 'categories')
         : null;
       const category = await this.prisma.category.create({
         data: {

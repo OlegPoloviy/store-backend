@@ -1,0 +1,445 @@
+{
+  "work items": [
+    {
+      "externalId": "GMP-001",
+      "workType": "Task",
+      "summary": "Initialize NestJS backend project",
+      "description": "Create NestJS backend project with modular structure for auth, users, steam, games, library, metadata, search, recommendations, prices, jobs, notifications and observability.",
+      "labels": ["mvp", "foundation", "backend"]
+    },
+    {
+      "externalId": "GMP-002",
+      "workType": "Task",
+      "summary": "Setup Docker Compose environment",
+      "description": "Create Docker Compose configuration for API, worker, PostgreSQL, Redis, Elasticsearch, Prometheus and Grafana.",
+      "labels": ["mvp", "foundation", "docker"]
+    },
+    {
+      "externalId": "GMP-003",
+      "workType": "Task",
+      "summary": "Setup PostgreSQL and Prisma",
+      "description": "Configure PostgreSQL connection, Prisma schema, migrations and initial seed structure.",
+      "labels": ["mvp", "foundation", "database", "prisma"]
+    },
+    {
+      "externalId": "GMP-004",
+      "workType": "Task",
+      "summary": "Setup Redis integration",
+      "description": "Configure Redis connection for BullMQ queues, caching, rate limiting and distributed locks.",
+      "labels": ["mvp", "foundation", "redis"]
+    },
+    {
+      "externalId": "GMP-005",
+      "workType": "Task",
+      "summary": "Implement health check endpoint",
+      "description": "Create /health endpoint that checks API status, PostgreSQL connection, Redis connection and Elasticsearch connection.",
+      "labels": ["mvp", "foundation", "healthcheck"]
+    },
+    {
+      "externalId": "GMP-006",
+      "workType": "Task",
+      "summary": "Create user and refresh token models",
+      "description": "Add User and RefreshToken database models with email, username, password hash, Steam ID, public profile flag and timestamps.",
+      "labels": ["mvp", "auth", "database"]
+    },
+    {
+      "externalId": "GMP-007",
+      "workType": "Task",
+      "summary": "Implement user registration",
+      "description": "Create registration endpoint with validation, password hashing and duplicate email handling.",
+      "labels": ["mvp", "auth"]
+    },
+    {
+      "externalId": "GMP-008",
+      "workType": "Task",
+      "summary": "Implement login with JWT",
+      "description": "Create login endpoint that validates credentials and returns JWT access token and refresh token.",
+      "labels": ["mvp", "auth", "jwt"]
+    },
+    {
+      "externalId": "GMP-009",
+      "workType": "Task",
+      "summary": "Implement refresh token rotation",
+      "description": "Create secure refresh token rotation with token invalidation and reuse protection.",
+      "labels": ["mvp", "auth", "security"]
+    },
+    {
+      "externalId": "GMP-010",
+      "workType": "Task",
+      "summary": "Implement current user profile endpoints",
+      "description": "Create endpoints for fetching and updating current user profile data.",
+      "labels": ["mvp", "auth", "users"]
+    },
+    {
+      "externalId": "GMP-011",
+      "workType": "Task",
+      "summary": "Create Steam integration module",
+      "description": "Create Steam module with API client, configuration, error handling and response mapping.",
+      "labels": ["mvp", "steam", "integration"]
+    },
+    {
+      "externalId": "GMP-012",
+      "workType": "Task",
+      "summary": "Implement Steam profile linking",
+      "description": "Allow user to submit Steam ID or Steam profile URL. Resolve and validate Steam profile before saving it to the user account.",
+      "labels": ["mvp", "steam", "users"]
+    },
+    {
+      "externalId": "GMP-013",
+      "workType": "Task",
+      "summary": "Create Steam sync database model",
+      "description": "Add SteamSyncJob model with status, user ID, startedAt, completedAt, error message and imported games count.",
+      "labels": ["mvp", "steam", "database"]
+    },
+    {
+      "externalId": "GMP-014",
+      "workType": "Task",
+      "summary": "Setup BullMQ worker process",
+      "description": "Create separate worker process for background jobs and configure BullMQ queues with Redis.",
+      "labels": ["mvp", "jobs", "bullmq"]
+    },
+    {
+      "externalId": "GMP-015",
+      "workType": "Task",
+      "summary": "Implement Steam library sync job",
+      "description": "Create background job that fetches user's owned Steam games and saves imported data.",
+      "labels": ["mvp", "steam", "jobs"]
+    },
+    {
+      "externalId": "GMP-016",
+      "workType": "Task",
+      "summary": "Prevent duplicate Steam sync jobs",
+      "description": "Use Redis distributed lock or active sync status to prevent multiple simultaneous Steam sync jobs for the same user.",
+      "labels": ["mvp", "steam", "redis", "jobs"]
+    },
+    {
+      "externalId": "GMP-017",
+      "workType": "Task",
+      "summary": "Expose Steam sync status endpoint",
+      "description": "Create endpoint that returns current Steam sync status, progress, imported count and error information if sync failed.",
+      "labels": ["mvp", "steam", "api"]
+    },
+    {
+      "externalId": "GMP-018",
+      "workType": "Task",
+      "summary": "Create game library database models",
+      "description": "Add Game, GameExternalId and UserGame models to support internal games, external provider IDs and user-specific library data.",
+      "labels": ["mvp", "games", "library", "database"]
+    },
+    {
+      "externalId": "GMP-019",
+      "workType": "Task",
+      "summary": "Map Steam games to internal game records",
+      "description": "Create mapping logic that converts Steam imported games into internal Game and UserGame records.",
+      "labels": ["mvp", "steam", "games"]
+    },
+    {
+      "externalId": "GMP-020",
+      "workType": "Task",
+      "summary": "Create metadata provider abstraction",
+      "description": "Create common metadata provider interface for IGDB or RAWG. Provider should support search by title and fetching game details.",
+      "labels": ["mvp", "metadata", "integration"]
+    },
+    {
+      "externalId": "GMP-021",
+      "workType": "Task",
+      "summary": "Implement metadata enrichment job",
+      "description": "Create background job that enriches imported games with title, description, cover, genres, platforms, developers, publishers and release date.",
+      "labels": ["mvp", "metadata", "jobs"]
+    },
+    {
+      "externalId": "GMP-022",
+      "workType": "Task",
+      "summary": "Cache metadata provider responses",
+      "description": "Use Redis to cache IGDB or RAWG metadata responses and reduce repeated external API calls.",
+      "labels": ["mvp", "metadata", "redis", "cache"]
+    },
+    {
+      "externalId": "GMP-023",
+      "workType": "Task",
+      "summary": "Implement library list endpoint",
+      "description": "Create endpoint for returning user's imported game library with pagination, filters and basic sorting.",
+      "labels": ["mvp", "library", "api"]
+    },
+    {
+      "externalId": "GMP-024",
+      "workType": "Task",
+      "summary": "Implement game status update",
+      "description": "Allow user to update game status: BACKLOG, PLAYING, COMPLETED, DROPPED or WISHLIST.",
+      "labels": ["mvp", "library"]
+    },
+    {
+      "externalId": "GMP-025",
+      "workType": "Task",
+      "summary": "Implement personal game rating and note",
+      "description": "Allow user to add rating, favorite flag and personal note to a game in their library.",
+      "labels": ["mvp", "library"]
+    },
+    {
+      "externalId": "GMP-026",
+      "workType": "Task",
+      "summary": "Implement library statistics endpoint",
+      "description": "Return total games, completed games, backlog games, wishlist games, total playtime and top genres.",
+      "labels": ["mvp", "dashboard", "library"]
+    },
+    {
+      "externalId": "GMP-027",
+      "workType": "Task",
+      "summary": "Setup Elasticsearch service",
+      "description": "Add Elasticsearch to Docker Compose and configure connection from NestJS API and worker.",
+      "labels": ["mvp", "search", "elasticsearch"]
+    },
+    {
+      "externalId": "GMP-028",
+      "workType": "Task",
+      "summary": "Create games Elasticsearch index mapping",
+      "description": "Create games_index mapping with fields for title, alternative titles, genres, platforms, developers, publishers, release year and description.",
+      "labels": ["mvp", "search", "elasticsearch"]
+    },
+    {
+      "externalId": "GMP-029",
+      "workType": "Task",
+      "summary": "Implement game indexing job",
+      "description": "Create BullMQ job that indexes or updates game documents in Elasticsearch after PostgreSQL changes.",
+      "labels": ["mvp", "search", "jobs"]
+    },
+    {
+      "externalId": "GMP-030",
+      "workType": "Task",
+      "summary": "Implement game search endpoint",
+      "description": "Create search endpoint with fuzzy search, genre filter, platform filter, release year filter and pagination.",
+      "labels": ["mvp", "search", "api"]
+    },
+    {
+      "externalId": "GMP-031",
+      "workType": "Task",
+      "summary": "Create recommendation database models",
+      "description": "Add Recommendation and RecommendationReason models with score, type, user ID, game ID and generated reasons.",
+      "labels": ["mvp", "recommendations", "database"]
+    },
+    {
+      "externalId": "GMP-032",
+      "workType": "Task",
+      "summary": "Implement rule-based recommendation scoring",
+      "description": "Create scoring service based on genre match, favorite similarity, user rating signal, platform match, discount signal and popularity signal.",
+      "labels": ["mvp", "recommendations"]
+    },
+    {
+      "externalId": "GMP-033",
+      "workType": "Task",
+      "summary": "Generate recommendation explanations",
+      "description": "Create human-readable recommendation reasons such as matching favorite genres, similar completed games, high discount or wishlist presence.",
+      "labels": ["mvp", "recommendations"]
+    },
+    {
+      "externalId": "GMP-034",
+      "workType": "Task",
+      "summary": "Implement recommendation generation job",
+      "description": "Create background job that generates and stores recommendations for a user after library sync or manual regeneration.",
+      "labels": ["mvp", "recommendations", "jobs"]
+    },
+    {
+      "externalId": "GMP-035",
+      "workType": "Task",
+      "summary": "Expose recommendations endpoint",
+      "description": "Create endpoints for fetching user recommendations and manually triggering recommendation regeneration.",
+      "labels": ["mvp", "recommendations", "api"]
+    },
+    {
+      "externalId": "GMP-036",
+      "workType": "Task",
+      "summary": "Create price and deal database models",
+      "description": "Add Store, GamePrice, PriceSnapshot and PriceAlert models.",
+      "labels": ["mvp", "prices", "database"]
+    },
+    {
+      "externalId": "GMP-037",
+      "workType": "Task",
+      "summary": "Create price provider abstraction",
+      "description": "Create common interface for price providers such as CheapShark or IsThereAnyDeal.",
+      "labels": ["mvp", "prices", "integration"]
+    },
+    {
+      "externalId": "GMP-038",
+      "workType": "Task",
+      "summary": "Implement CheapShark price provider",
+      "description": "Fetch current game deals and prices from CheapShark and map provider response to internal price models.",
+      "labels": ["mvp", "prices", "cheapshark"]
+    },
+    {
+      "externalId": "GMP-039",
+      "workType": "Task",
+      "summary": "Implement price refresh job",
+      "description": "Create background job that refreshes prices for wishlist, recommended and tracked games.",
+      "labels": ["mvp", "prices", "jobs"]
+    },
+    {
+      "externalId": "GMP-040",
+      "workType": "Task",
+      "summary": "Implement deal decision logic",
+      "description": "Create service that assigns labels such as BUY_NOW, GOOD_DEAL, HISTORICAL_LOW, WAIT, NO_DEAL_FOUND or OWNED_ALREADY.",
+      "labels": ["mvp", "prices", "deals"]
+    },
+    {
+      "externalId": "GMP-041",
+      "workType": "Task",
+      "summary": "Expose game prices endpoint",
+      "description": "Create endpoint for fetching current prices, best store, discount percentage and deal label for a selected game.",
+      "labels": ["mvp", "prices", "api"]
+    },
+    {
+      "externalId": "GMP-042",
+      "workType": "Task",
+      "summary": "Implement price alerts",
+      "description": "Allow users to create, update, disable and delete price alerts based on target price, discount percentage or historical low.",
+      "labels": ["mvp", "prices", "alerts"]
+    },
+    {
+      "externalId": "GMP-043",
+      "workType": "Task",
+      "summary": "Implement in-app notifications",
+      "description": "Create notification model and endpoint for showing triggered price alert notifications to the user.",
+      "labels": ["mvp", "notifications", "prices"]
+    },
+    {
+      "externalId": "GMP-044",
+      "workType": "Task",
+      "summary": "Initialize Next.js frontend project",
+      "description": "Create Next.js frontend project with routing, shared layout, API client, auth state management and UI library setup.",
+      "labels": ["mvp", "frontend", "nextjs"]
+    },
+    {
+      "externalId": "GMP-045",
+      "workType": "Task",
+      "summary": "Create login and registration pages",
+      "description": "Implement login and registration forms with validation, API integration and protected route handling.",
+      "labels": ["mvp", "frontend", "auth"]
+    },
+    {
+      "externalId": "GMP-046",
+      "workType": "Task",
+      "summary": "Create dashboard page",
+      "description": "Show library summary, top genres, recent sync status, current recommendations and wishlist deals.",
+      "labels": ["mvp", "frontend", "dashboard"]
+    },
+    {
+      "externalId": "GMP-047",
+      "workType": "Task",
+      "summary": "Create Steam linking UI",
+      "description": "Create UI for entering Steam ID or profile URL, linking Steam profile, starting sync and viewing sync status.",
+      "labels": ["mvp", "frontend", "steam"]
+    },
+    {
+      "externalId": "GMP-048",
+      "workType": "Task",
+      "summary": "Create library page",
+      "description": "Display imported games with filters, pagination, status controls, rating and note editing.",
+      "labels": ["mvp", "frontend", "library"]
+    },
+    {
+      "externalId": "GMP-049",
+      "workType": "Task",
+      "summary": "Create game details page",
+      "description": "Show game metadata, user status, rating, note, current prices, deal label and related recommendations.",
+      "labels": ["mvp", "frontend", "games"]
+    },
+    {
+      "externalId": "GMP-050",
+      "workType": "Task",
+      "summary": "Create search page",
+      "description": "Create Elasticsearch-powered search UI with query input, filters, sorting and pagination.",
+      "labels": ["mvp", "frontend", "search"]
+    },
+    {
+      "externalId": "GMP-051",
+      "workType": "Task",
+      "summary": "Create recommendations page",
+      "description": "Display recommended games with score, explanation reasons and current deal information.",
+      "labels": ["mvp", "frontend", "recommendations"]
+    },
+    {
+      "externalId": "GMP-052",
+      "workType": "Task",
+      "summary": "Create deals and price alerts pages",
+      "description": "Display current best deals and allow users to create, update and disable price alerts.",
+      "labels": ["mvp", "frontend", "deals"]
+    },
+    {
+      "externalId": "GMP-053",
+      "workType": "Task",
+      "summary": "Add Prometheus metrics endpoint",
+      "description": "Expose /metrics endpoint with HTTP request count, request duration and error count.",
+      "labels": ["mvp", "observability", "prometheus"]
+    },
+    {
+      "externalId": "GMP-054",
+      "workType": "Task",
+      "summary": "Add queue metrics",
+      "description": "Track BullMQ completed jobs, failed jobs, job duration and waiting jobs by queue.",
+      "labels": ["mvp", "observability", "bullmq"]
+    },
+    {
+      "externalId": "GMP-055",
+      "workType": "Task",
+      "summary": "Add external API metrics",
+      "description": "Track request count, errors and duration for Steam, metadata provider and price provider APIs.",
+      "labels": ["mvp", "observability", "external-api"]
+    },
+    {
+      "externalId": "GMP-056",
+      "workType": "Task",
+      "summary": "Create Grafana dashboards",
+      "description": "Create Grafana dashboards for API latency, errors, queue health, external API health, Steam syncs and price refresh jobs.",
+      "labels": ["mvp", "observability", "grafana"]
+    },
+    {
+      "externalId": "GMP-057",
+      "workType": "Task",
+      "summary": "Add unit tests for recommendation scoring",
+      "description": "Cover recommendation scoring logic, recommendation types and reason generation with unit tests.",
+      "labels": ["mvp", "testing", "recommendations"]
+    },
+    {
+      "externalId": "GMP-058",
+      "workType": "Task",
+      "summary": "Add unit tests for deal decision logic",
+      "description": "Cover BUY_NOW, GOOD_DEAL, HISTORICAL_LOW, WAIT, NO_DEAL_FOUND and OWNED_ALREADY decision cases.",
+      "labels": ["mvp", "testing", "deals"]
+    },
+    {
+      "externalId": "GMP-059",
+      "workType": "Task",
+      "summary": "Add integration tests for auth flow",
+      "description": "Test registration, login, refresh token rotation, logout and protected routes.",
+      "labels": ["mvp", "testing", "auth"]
+    },
+    {
+      "externalId": "GMP-060",
+      "workType": "Task",
+      "summary": "Add integration tests for Steam sync with mocked API",
+      "description": "Mock Steam API responses and test Steam profile linking, sync job creation and imported game persistence.",
+      "labels": ["mvp", "testing", "steam"]
+    },
+    {
+      "externalId": "GMP-061",
+      "workType": "Task",
+      "summary": "Add integration tests for price refresh with mocked provider",
+      "description": "Mock price provider responses and test current price updates, price snapshots and deal labels.",
+      "labels": ["mvp", "testing", "prices"]
+    },
+    {
+      "externalId": "GMP-062",
+      "workType": "Task",
+      "summary": "Create project README",
+      "description": "Document project idea, architecture, local setup, environment variables, external APIs, queues, monitoring and engineering highlights.",
+      "labels": ["mvp", "documentation", "readme"]
+    },
+    {
+      "externalId": "GMP-063",
+      "workType": "Task",
+      "summary": "Setup GitHub Actions CI",
+      "description": "Create CI workflow that installs dependencies, runs lint, typecheck, tests and build.",
+      "labels": ["mvp", "ci", "github-actions"]
+    }
+  ]
+}

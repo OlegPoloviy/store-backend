@@ -11,7 +11,6 @@ import {
   Patch,
 } from '@nestjs/common';
 import { CartService } from './cart.service';
-import { AuthGuard } from '@nestjs/passport';
 import { AddToCartDto } from 'src/DTO/add-to-cart.dto';
 import { OptionalJwtAuthGuard } from 'src/guards/optional.guard';
 
@@ -19,7 +18,7 @@ import { OptionalJwtAuthGuard } from 'src/guards/optional.guard';
 export class CartController {
   constructor(private cartService: CartService) {}
 
-  @UseGuards(AuthGuard('jwt'))
+  @UseGuards(OptionalJwtAuthGuard)
   @Post('items')
   async addToCart(
     @Body() dto: AddToCartDto,

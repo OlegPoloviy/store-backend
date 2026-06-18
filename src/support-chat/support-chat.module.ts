@@ -1,18 +1,12 @@
-// import { Module } from '@nestjs/common';
-// import { TelegrafModule } from 'nestjs-telegraf';
-// import { ConfigModule, ConfigService } from '@nestjs/config';
-// import { SupportChatService } from './support-chat.service';
+import { Module } from '@nestjs/common';
+import { ConfigModule } from '@nestjs/config';
+import { PrismaModule } from 'src/prisma/prisma.module';
+import { SupportChatController } from './support-chat.controller';
+import { SupportChatService } from './support-chat.service';
 
-// @Module({
-//   imports: [
-//     TelegrafModule.forRootAsync({
-//       imports: [ConfigModule],
-//       useFactory: (configService: ConfigService) => ({
-//         token: configService.get<string>('TELEGRAM_BOT_TOKEN'),
-//       }),
-//       inject: [ConfigService],
-//     }),
-//   ],
-//   providers: [SupportChatService],
-// })
-// export class SupportChatModule {}
+@Module({
+  imports: [ConfigModule, PrismaModule],
+  controllers: [SupportChatController],
+  providers: [SupportChatService],
+})
+export class SupportChatModule {}

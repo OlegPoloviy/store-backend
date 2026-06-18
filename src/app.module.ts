@@ -11,7 +11,7 @@ import { FavoritesModule } from './favorites/favorites.module';
 import { CollectionsModule } from './collections/collections.module';
 import { CartModule } from './cart/cart.module';
 import { ConfigModule } from '@nestjs/config';
-// import { SupportChatModule } from './support-chat/support-chat.module';
+import { SupportChatModule } from './support-chat/support-chat.module';
 
 @Module({
   imports: [
@@ -25,7 +25,7 @@ import { ConfigModule } from '@nestjs/config';
     FavoritesModule,
     CollectionsModule,
     CartModule,
-    // SupportChatModule,
+    SupportChatModule,
   ],
   controllers: [AppController],
   providers: [AppService],

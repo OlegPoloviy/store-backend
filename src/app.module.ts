@@ -10,10 +10,12 @@ import { AuthModule } from './auth/auth.module';
 import { FavoritesModule } from './favorites/favorites.module';
 import { CollectionsModule } from './collections/collections.module';
 import { CartModule } from './cart/cart.module';
-// import { SupportChatModule } from './support-chat/support-chat.module';
+import { ConfigModule } from '@nestjs/config';
+import { SupportChatModule } from './support-chat/support-chat.module';
 
 @Module({
   imports: [
+    ConfigModule.forRoot({ isGlobal: true }),
     ProductsModule,
     PrismaModule,
     DmsModule,
@@ -23,7 +25,7 @@ import { CartModule } from './cart/cart.module';
     FavoritesModule,
     CollectionsModule,
     CartModule,
-    // SupportChatModule,
+    SupportChatModule,
   ],
   controllers: [AppController],
   providers: [AppService],

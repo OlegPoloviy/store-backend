@@ -32,6 +32,20 @@
 $ pnpm install
 ```
 
+## Environment
+
+Image uploads use Supabase Storage bucket `product-images`.
+
+```bash
+SUPABASE_URL="https://your-project-ref.supabase.co"
+SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"
+# or
+SUPABASE_ANON_KEY="your-anon-key"
+```
+
+Use a Supabase API key from Project Settings > API. Do not use the JWT secret
+as the Storage API bearer token.
+
 ## Compile and run the project
 
 ```bash

@@ -115,6 +115,7 @@ model User {
   favorites Favorite[]
   carts     Cart[]
   collections Collection[]
+  supportTelegramAdmin SupportTelegramAdmin?
 }
 
 model Cart {
@@ -197,4 +198,67 @@ enum CartStatus {
   ACTIVE
   CHECKED_OUT
   EXPIRED
+}
+
+enum SupportConversationStatus {
+  OPEN
+  CLOSED
+}
+
+enum SupportMessageDirection {
+  CUSTOMER_TO_ADMIN
+  ADMIN_TO_CUSTOMER
+}
+
+model SupportTelegramAdmin {
+  id                String   @id @default(uuid())
+  userId            String   @unique
+  telegramChatId    BigInt   @unique
+  telegramUsername  String?
+  createdAt         DateTime @default(now())
+  updatedAt         DateTime @updatedAt
+
+  user              User     @relation(fields: [userId], references: [id], onDelete: Cascade)
+
+  @@index([telegramChatId])
+}
+
+model SupportConversation {
+  id             String                    @id @default(uuid())
+  customerId     String?
+  customerName   String?
+  customerEmail  String?
+  customerPhone  String?
+  status         SupportConversationStatus @default(OPEN)
+  createdAt      DateTime                  @default(now())
+  updatedAt      DateTime                  @updatedAt
+
+  messages       SupportMessage[]
+}
+
+model SupportMessage {
+  id             String                  @id @default(uuid())
+  conversationId String
+  direction      SupportMessageDirection
+  body           String                  @db.Text
+  senderName     String?
+  createdAt      DateTime                @default(now())
+
+  conversation   SupportConversation     @relation(fields: [conversationId], references: [id], onDelete: Cascade)
+  deliveries     SupportTelegramDelivery[]
+
+  @@index([conversationId])
+}
+
+model SupportTelegramDelivery {
+  id                String         @id @default(uuid())
+  messageId         String
+  telegramChatId    BigInt
+  telegramMessageId Int
+  createdAt         DateTime       @default(now())
+
+  message           SupportMessage @relation(fields: [messageId], references: [id], onDelete: Cascade)
+
+  @@unique([telegramChatId, telegramMessageId])
+  @@index([messageId])
 }

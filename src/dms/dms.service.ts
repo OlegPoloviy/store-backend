@@ -1,80 +1,165 @@
 import { Injectable, InternalServerErrorException } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
-import {
-  S3Client,
-  PutObjectCommand,
-  DeleteObjectCommand,
-  GetObjectCommand,
-} from '@aws-sdk/client-s3';
 import { v4 as uuidv4 } from 'uuid';
 import { Express } from 'express';
 
 @Injectable()
 export class DmsService {
-  private client: S3Client;
-  private bucketName: string;
+  private readonly bucketName = 'product-images';
+  private supabaseUrl: string;
+  private supabaseKey: string;
+  private storageUrl: string;
 
   constructor(private readonly configService: ConfigService) {
     this.validateConfig();
-    this.initializeS3Client();
   }
 
   private validateConfig() {
-    const requiredVars = [
-      'S3_REGION',
-      'S3_ACCESS_KEY',
-      'S3_SECRET_ACCESS_KEY',
-      'S3_BUCKET_NAME',
-    ];
+    const supabaseUrl = this.getConfigValue('SUPABASE_URL');
+    const supabaseKey = this.getSupabaseStorageKey();
 
-    for (const varName of requiredVars) {
-      const value = this.configService.get(varName);
-      if (!value) {
-        throw new Error(`${varName} not found in environment variables`);
-      }
+    if (!supabaseUrl) {
+      throw new Error('SUPABASE_URL not found in environment variables');
+    }
+    if (!supabaseKey) {
+      throw new Error(
+        'Valid SUPABASE_SERVICE_ROLE_KEY or SUPABASE_ANON_KEY not found in environment variables',
+      );
     }
 
-    this.bucketName = this.configService.get('S3_BUCKET_NAME');
+    this.supabaseUrl = supabaseUrl.replace(/\/$/, '');
+    this.supabaseKey = supabaseKey;
+    this.storageUrl = `${this.supabaseUrl}/storage/v1`;
   }
 
-  private initializeS3Client() {
-    const s3_region = this.configService.get('S3_REGION');
-    const accessKeyId = this.configService.get('S3_ACCESS_KEY');
-    const secretAccessKey = this.configService.get('S3_SECRET_ACCESS_KEY');
-
-    this.client = new S3Client({
-      region: s3_region,
-      credentials: {
-        accessKeyId,
-        secretAccessKey,
-      },
-    });
+  private getConfigValue(key: string): string | undefined {
+    return this.configService.get<string>(key) || process.env[key];
   }
 
-  async uploadSingleFile(file: Express.Multer.File) {
+  private getSupabaseStorageKey(): string | undefined {
+    const serviceRoleKey = this.getConfigValue('SUPABASE_SERVICE_ROLE_KEY');
+    const anonKey = this.getConfigValue('SUPABASE_ANON_KEY');
+
+    if (this.isCompactJws(serviceRoleKey)) {
+      return serviceRoleKey;
+    }
+    if (this.isCompactJws(anonKey)) {
+      return anonKey;
+    }
+
+    return undefined;
+  }
+
+  private isCompactJws(value?: string): value is string {
+    return Boolean(value && value.split('.').length === 3);
+  }
+
+  private encodePath(path: string): string {
+    return path.split('/').map(encodeURIComponent).join('/');
+  }
+
+  private getFileExtension(file: Express.Multer.File): string {
+    const originalExtension = file.originalname.split('.').pop();
+    if (originalExtension && originalExtension !== file.originalname) {
+      return originalExtension.toLowerCase();
+    }
+
+    return file.mimetype.split('/').pop() || 'bin';
+  }
+
+  private createStoragePath(file: Express.Multer.File, folder: string): string {
+    const extension = this.getFileExtension(file);
+    return `${folder}/${uuidv4()}-${Date.now()}.${extension}`;
+  }
+
+  async uploadSingleFile(file: Express.Multer.File, folder = 'uploads') {
     try {
-      const key = `${uuidv4()}-${Date.now()}`;
-
-      const command = new PutObjectCommand({
-        Bucket: this.bucketName,
-        Key: key,
-        Body: file.buffer,
-        ContentType: file.mimetype,
-        Metadata: {
-          originalName: file.originalname,
-        },
+      const path = this.createStoragePath(file, folder);
+      const uploadBody = new Blob([new Uint8Array(file.buffer)], {
+        type: file.mimetype,
       });
+      const response = await fetch(
+        `${this.storageUrl}/object/${this.bucketName}/${this.encodePath(path)}`,
+        {
+          method: 'POST',
+          headers: {
+            Authorization: `Bearer ${this.supabaseKey}`,
+            apikey: this.supabaseKey,
+            'Content-Type': file.mimetype,
+            'x-upsert': 'false',
+          },
+          body: uploadBody,
+        },
+      );
 
-      const uploadResult = await this.client.send(command);
-      console.log(uploadResult);
-      return await this.getFileUrl(key);
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+
+      return this.getFileUrl(path);
     } catch (error) {
       console.error('File upload error:', error);
       throw new InternalServerErrorException('Failed to upload file');
     }
   }
 
-  async getFileUrl(key: string) {
-    return { url: `https://${this.bucketName}.s3.amazonaws.com/${key}` };
+  getFileUrl(path: string) {
+    return {
+      path,
+      url: `${this.storageUrl}/object/public/${this.bucketName}/${this.encodePath(path)}`,
+    };
+  }
+
+  getPathFromUrl(url: string): string | null {
+    const publicPrefix = `/storage/v1/object/public/${this.bucketName}/`;
+    const objectPrefix = `/storage/v1/object/${this.bucketName}/`;
+
+    try {
+      const { pathname } = new URL(url);
+      const prefix = pathname.includes(publicPrefix)
+        ? publicPrefix
+        : objectPrefix;
+      const pathStart = pathname.indexOf(prefix);
+
+      if (pathStart === -1) {
+        return null;
+      }
+
+      return decodeURIComponent(pathname.slice(pathStart + prefix.length));
+    } catch {
+      return null;
+    }
+  }
+
+  async deleteFilesByUrls(urls: string[]) {
+    const paths = urls
+      .map((url) => this.getPathFromUrl(url))
+      .filter((path): path is string => Boolean(path));
+
+    if (paths.length === 0) {
+      return;
+    }
+
+    try {
+      const response = await fetch(
+        `${this.storageUrl}/object/${this.bucketName}`,
+        {
+          method: 'DELETE',
+          headers: {
+            Authorization: `Bearer ${this.supabaseKey}`,
+            apikey: this.supabaseKey,
+            'Content-Type': 'application/json',
+          },
+          body: JSON.stringify({ prefixes: paths }),
+        },
+      );
+
+      if (!response.ok) {
+        throw new Error(await response.text());
+      }
+    } catch (error) {
+      console.error('File delete error:', error);
+      throw new InternalServerErrorException('Failed to delete files');
+    }
   }
 }

@@ -38,7 +38,7 @@ $ pnpm install
 
 Copy the checkout settings from `.env.example` and supply real merchant credentials. The payment is charged in UAH. `CHECKOUT_SHIPPING_RATES_UAH_JSON` contains country codes and shipping charges in kopiykas; checkout rejects unconfigured countries and products not priced in UAH. Configure the real shipping charge for every supported destination before accepting orders. The current implementation does not calculate VAT, sales tax, import duties or inventory reservations; settle those policies before enabling a country.
 
-Apply the Prisma migration and generate the client before running the API:
+Apply the Prisma migrations and generate the client before running the API. The existing Supabase database contains cart, favorite and collection tables that were previously created outside migration history. Use `migrate deploy` against that database; do not accept a `migrate dev` prompt to reset it:
 
 ```bash
 pnpm exec prisma migrate deploy

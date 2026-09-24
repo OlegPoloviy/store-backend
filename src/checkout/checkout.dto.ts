@@ -1,4 +1,4 @@
-import { IsEmail, IsNotEmpty, IsOptional, IsString, Length, Matches, MaxLength } from 'class-validator';
+import { IsEmail, IsIn, IsNotEmpty, IsOptional, IsString, Length, Matches, MaxLength } from 'class-validator';
 
 export class CreateCheckoutDto {
   @IsEmail()
@@ -41,4 +41,9 @@ export class CreateCheckoutDto {
   @IsNotEmpty()
   @MaxLength(30)
   shippingPostalCode: string;
+}
+
+export class MockPaymentDto {
+  @IsIn(['approved', 'declined'])
+  outcome: 'approved' | 'declined';
 }

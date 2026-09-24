@@ -7,7 +7,7 @@ import {
 } from '@nestjs/common';
 import { ConfigService } from '@nestjs/config';
 import { createHash, randomUUID } from 'crypto';
-import { Prisma } from 'generated/prisma';
+import { PaymentAttempt, Prisma } from 'generated/prisma';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateCheckoutDto } from './checkout.dto';
 import { toMinor } from './money';
@@ -33,16 +33,29 @@ export class CheckoutService {
     return createHash('sha256').update(value).digest('hex');
   }
 
-  private shippingMinor(country: string): number {
-    const raw = this.config.get<string>('CHECKOUT_SHIPPING_RATES_UAH_JSON');
-    if (!raw) throw new Error('CHECKOUT_SHIPPING_RATES_UAH_JSON is required');
-    let rates: Record<string, number>;
+  private isMockMode(): boolean {
+    const mode = this.config.get<string>('PAYMENT_MODE');
+    if (mode !== 'mock') return false;
+    if (process.env.NODE_ENV !== 'development') {
+      throw new Error('Mock payments are only available with NODE_ENV=development');
+    }
+    return true;
+  }
+
+  private shippingMinor(country: string, currency: string): number {
+    const mock = this.isMockMode();
+    const setting = mock ? 'MOCK_SHIPPING_RATES_MINOR_JSON' : 'CHECKOUT_SHIPPING_RATES_UAH_JSON';
+    const raw = this.config.get<string>(setting);
+    if (!raw) throw new Error(`${setting} is required`);
+    let rates: Record<string, number> | Record<string, Record<string, number>>;
     try {
       rates = JSON.parse(raw);
     } catch {
-      throw new Error('Invalid CHECKOUT_SHIPPING_RATES_UAH_JSON');
+      throw new Error(`Invalid ${setting}`);
     }
-    const amount = rates[country];
+    const amount = mock
+      ? (rates as Record<string, Record<string, number>>)[currency]?.[country]
+      : (rates as Record<string, number>)[country];
     if (!Number.isSafeInteger(amount) || amount < 0 || amount > 2147483647) {
       throw new BadRequestException('Shipping is not available for this country');
     }
@@ -61,10 +74,14 @@ export class CheckoutService {
   }
 
   private calculate(cart: Awaited<ReturnType<CheckoutService['activeCart']>>, country: string) {
+    const currency = cart.items[0].product.currency;
+    if (!['UAH', 'USD', 'EUR'].includes(currency) || (!this.isMockMode() && currency !== 'UAH')) {
+      throw new BadRequestException('Checkout currency is not supported');
+    }
     let subtotalMinor = 0;
     const items = cart.items.map((item) => {
-      if (item.product.currency !== 'UAH') {
-        throw new BadRequestException('Only UAH-priced products can be checked out');
+      if (item.product.currency !== currency) {
+        throw new BadRequestException('Cart items must use the same currency');
       }
       if (!Number.isSafeInteger(item.quantity) || item.quantity < 1 || item.quantity > 100) {
         throw new BadRequestException('Invalid product quantity');
@@ -81,15 +98,15 @@ export class CheckoutService {
         quantity: item.quantity,
         unitPriceMinor,
         totalMinor,
-        currency: 'UAH',
+        currency,
       };
     });
-    const shippingMinor = this.shippingMinor(country);
+    const shippingMinor = this.shippingMinor(country, currency);
     const totalMinor = subtotalMinor + shippingMinor;
     if (!Number.isSafeInteger(totalMinor) || totalMinor > 2147483647) {
       throw new BadRequestException('Order amount is too large');
     }
-    return { items, subtotalMinor, shippingMinor, totalMinor, currency: 'UAH' };
+    return { items, subtotalMinor, shippingMinor, totalMinor, currency };
   }
 
   async quote(customer: Customer, country: string) {
@@ -147,7 +164,7 @@ export class CheckoutService {
             customerLastName: dto.customerLastName.trim(),
             customerPhone: dto.customerPhone?.trim(),
             items: { create: amount.items },
-            attempts: { create: { reference: randomUUID(), amountMinor: amount.totalMinor, currency: 'UAH' } },
+            attempts: { create: { reference: randomUUID(), amountMinor: amount.totalMinor, currency: amount.currency } },
           },
           include: { items: true, attempts: true },
         });
@@ -181,7 +198,14 @@ export class CheckoutService {
       shippingMinor: order.shippingMinor,
       totalMinor: order.totalMinor,
       payment: order.status === 'PENDING' && attempt?.status === 'CREATED'
-        ? this.gateway.form(order, attempt)
+        ? this.isMockMode()
+          ? {
+              provider: 'mock',
+              method: 'POST',
+              action: `/checkout/orders/${order.id}/mock-payment`,
+              allowedOutcomes: ['approved', 'declined'],
+            }
+          : this.gateway.form(order, attempt)
         : null,
     };
   }
@@ -216,38 +240,70 @@ export class CheckoutService {
     return this.checkoutResponse(order);
   }
 
+  async mockPayment(customer: Customer, id: string, outcome: 'approved' | 'declined') {
+    if (!this.isMockMode()) throw new NotFoundException();
+    const order = await this.prisma.order.findUnique({
+      where: { id },
+      include: { attempts: { orderBy: { createdAt: 'desc' }, take: 1 } },
+    });
+    if (!order || (customer.userId
+      ? order.userId !== customer.userId
+      : !customer.anonymousId || order.anonymousIdHash !== this.hash(customer.anonymousId))) {
+      throw new NotFoundException('Order not found');
+    }
+    const attempt = order.attempts[0];
+    if (!attempt || order.status !== 'PENDING' || attempt.status !== 'CREATED') {
+      throw new ConflictException('Payment attempt is no longer pending');
+    }
+    await this.applyPaymentStatus(attempt, outcome === 'approved' ? 'Approved' : 'Declined', outcome === 'approved' ? '1100' : '1101', true);
+    return this.get(customer, id);
+  }
+
   async callback(body: WayForPayCallback) {
+    if (this.isMockMode()) throw new NotFoundException();
     if (!body || typeof body.orderReference !== 'string') throw new BadRequestException('Invalid callback');
     const attempt = await this.prisma.paymentAttempt.findUnique({ where: { reference: body.orderReference } });
     if (!attempt) throw new NotFoundException('Payment not found');
     this.gateway.verify(body, attempt.amountMinor);
-    if (body.transactionStatus === 'Approved') {
+    await this.applyPaymentStatus(attempt, body.transactionStatus, String(body.reasonCode));
+    return this.gateway.acknowledge(body.orderReference);
+  }
+
+  private async applyPaymentStatus(attempt: PaymentAttempt, status: string, reasonCode: string, strict = false) {
+    if (status === 'Approved') {
       await this.prisma.$transaction(async (tx) => {
-        await tx.paymentAttempt.updateMany({
-          where: { id: attempt.id, status: { in: ['CREATED', 'DECLINED'] } },
-          data: { status: 'APPROVED', gatewayStatus: body.transactionStatus, gatewayReasonCode: String(body.reasonCode) },
+        const paymentChanged = await tx.paymentAttempt.updateMany({
+          where: { id: attempt.id, status: strict ? 'CREATED' : { in: ['CREATED', 'DECLINED'] } },
+          data: { status: 'APPROVED', gatewayStatus: status, gatewayReasonCode: reasonCode },
         });
-        const changed = await tx.order.updateMany({ where: { id: attempt.orderId, status: { in: ['PENDING', 'FAILED'] } }, data: { status: 'PAID', paidAt: new Date() } });
+        if (strict && paymentChanged.count !== 1) throw new ConflictException('Payment attempt is no longer pending');
+        const changed = await tx.order.updateMany({
+          where: { id: attempt.orderId, status: strict ? 'PENDING' : { in: ['PENDING', 'FAILED'] } },
+          data: { status: 'PAID', paidAt: new Date() },
+        });
+        if (strict && changed.count !== 1) throw new ConflictException('Order is no longer pending');
         if (changed.count === 1) {
           const order = await tx.order.findUniqueOrThrow({ where: { id: attempt.orderId } });
           await tx.cart.updateMany({ where: { id: order.cartId }, data: { status: 'CHECKED_OUT' } });
         }
       });
-    } else if (body.transactionStatus === 'Declined' || body.transactionStatus === 'Expired') {
+    } else if (status === 'Declined' || status === 'Expired') {
       await this.prisma.$transaction(async (tx) => {
         const changed = await tx.paymentAttempt.updateMany({
           where: { id: attempt.id, status: 'CREATED' },
-          data: { status: 'DECLINED', gatewayStatus: body.transactionStatus, gatewayReasonCode: String(body.reasonCode) },
+          data: { status: 'DECLINED', gatewayStatus: status, gatewayReasonCode: reasonCode },
         });
+        if (strict && changed.count !== 1) throw new ConflictException('Payment attempt is no longer pending');
         if (changed.count === 1) {
-          await tx.order.updateMany({ where: { id: attempt.orderId, status: 'PENDING' }, data: { status: 'FAILED' } });
+          const orderChanged = await tx.order.updateMany({ where: { id: attempt.orderId, status: 'PENDING' }, data: { status: 'FAILED' } });
+          if (strict && orderChanged.count !== 1) throw new ConflictException('Order is no longer pending');
         }
       });
-    } else if (body.transactionStatus === 'Refunded' || body.transactionStatus === 'Voided') {
+    } else if (status === 'Refunded' || status === 'Voided') {
       await this.prisma.$transaction(async (tx) => {
         await tx.paymentAttempt.updateMany({
           where: { id: attempt.id, status: { not: 'REFUNDED' } },
-          data: { status: 'REFUNDED', gatewayStatus: body.transactionStatus },
+          data: { status: 'REFUNDED', gatewayStatus: status },
         });
         const otherApproved = await tx.paymentAttempt.count({
           where: { orderId: attempt.orderId, id: { not: attempt.id }, status: 'APPROVED' },
@@ -260,6 +316,5 @@ export class CheckoutService {
         }
       });
     }
-    return this.gateway.acknowledge(body.orderReference);
   }
 }

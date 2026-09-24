@@ -58,6 +58,7 @@ Guest cart tokens are bearer credentials. Store them privately and send them in 
 | `POST` | `/checkout` | Create frozen order; requires `Idempotency-Key` UUID and shipping/customer body below. |
 | `GET` | `/checkout/orders/:id` | Read own order status and items. |
 | `POST` | `/checkout/orders/:id/retry` | New payment attempt only after an explicit failed callback. |
+| `POST` | `/checkout/orders/:id/mock-payment` | Local mock result (`approved` or `declined`), available only in mock mode. |
 | `POST` | `/checkout/wayforpay/webhook` | WayForPay callback, HMAC verified; never call from the browser. |
 
 `POST /checkout` body:
@@ -79,6 +80,17 @@ Guest cart tokens are bearer credentials. Store them privately and send them in 
 The response includes `orderId`, totals in kopiykas, and `payment: { action, method, fields }`. Submit `fields` as an HTML POST form to the supplied `action`; array values use the form names `productName[]`, `productCount[]` and `productPrice[]`. Never treat a browser redirect as proof of payment: poll `GET /checkout/orders/:id` until the verified callback sets `PAID`. The same idempotency key returns the same order and payment attempt. A failed attempt can be retried using the retry endpoint; pending attempts cannot be retried.
 
 The server checks the WayForPay callback signature, merchant, amount, currency, and payment reference before changing order state. Repeated callbacks are safe. Card data is handled only on WayForPay's hosted page.
+
+### Local mock payment
+
+Set `NODE_ENV=development`, `PAYMENT_MODE=mock`, and `MOCK_SHIPPING_RATES_MINOR_JSON`. The API binds to `127.0.0.1` in this mode and never calls WayForPay; real WayForPay credentials are not required. A production process refuses to start with mock payments enabled. Mock mode accepts UAH, USD, and EUR products in a single-currency cart and uses explicit mock country shipping rates in the same currency's minor units. Real WayForPay checkout still accepts UAH only. Use a local database with the checkout migration applied. Then:
+
+1. `POST /cart/session`; keep the returned `cartToken` as the `x-cart-token` header for guest requests.
+2. Add a product with `POST /cart/items`, then call `GET /checkout/quote?country=DE`.
+3. Create the order with `POST /checkout` and a fresh UUID `Idempotency-Key`. The response contains `payment.provider: "mock"` and its action URL.
+4. `POST /checkout/orders/:id/mock-payment` with `{ "outcome": "approved" }` or `{ "outcome": "declined" }`, using the same cart token or JWT. Read the result with `GET /checkout/orders/:id`.
+
+Mock approval produces `PAID`; mock decline produces `FAILED`, after which `/retry` creates a new attempt. These calls simulate database state transitions only; they do not test WayForPay's hosted page, callback delivery, or bank authorization.
 
 Image uploads use Supabase Storage bucket `product-images`.
 

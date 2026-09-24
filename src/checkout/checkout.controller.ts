@@ -2,7 +2,7 @@ import { Body, Controller, Get, Headers, Param, Post, Query, Req, UseGuards } fr
 import { OptionalJwtAuthGuard } from 'src/guards/optional.guard';
 import { CartSessionService } from 'src/cart/cart-session.service';
 import { CheckoutService } from './checkout.service';
-import { CreateCheckoutDto } from './checkout.dto';
+import { CreateCheckoutDto, MockPaymentDto } from './checkout.dto';
 import { WayForPayCallback } from './wayforpay.service';
 
 @Controller('checkout')
@@ -47,6 +47,17 @@ export class CheckoutController {
   @Post('orders/:id/retry')
   retry(@Req() req: any, @Headers('x-cart-token') cartToken: string, @Param('id') id: string) {
     return this.checkout.retry(this.customer(req, cartToken), id);
+  }
+
+  @UseGuards(OptionalJwtAuthGuard)
+  @Post('orders/:id/mock-payment')
+  mockPayment(
+    @Req() req: any,
+    @Headers('x-cart-token') cartToken: string,
+    @Param('id') id: string,
+    @Body() dto: MockPaymentDto,
+  ) {
+    return this.checkout.mockPayment(this.customer(req, cartToken), id, dto.outcome);
   }
 
   @Post('wayforpay/webhook')

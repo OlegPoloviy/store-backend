@@ -40,7 +40,7 @@ describe('CheckoutService callback', () => {
       cart: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
     };
     db.$transaction = (fn: (tx: any) => Promise<any>) => fn(db);
-    const service = new CheckoutService(db, {} as ConfigService, gateway);
+    const service = new CheckoutService(db, { get: () => undefined } as unknown as ConfigService, gateway);
     expect((await service.callback(callback())).status).toBe('accept');
     expect((await service.callback(callback())).status).toBe('accept');
     expect(db.cart.updateMany).toHaveBeenCalledTimes(1);
@@ -54,7 +54,7 @@ describe('CheckoutService callback', () => {
       paymentAttempt: { findUnique: jest.fn().mockResolvedValue({ id: 'attempt-id', orderId: 'order-id', amountMinor: 2500 }) },
       $transaction: jest.fn(),
     };
-    const service = new CheckoutService(db, {} as ConfigService, gateway);
+    const service = new CheckoutService(db, { get: () => undefined } as unknown as ConfigService, gateway);
     await expect(service.callback({ ...callback(), amount: 26 })).rejects.toThrow();
     expect(db.$transaction).not.toHaveBeenCalled();
   });
@@ -117,5 +117,100 @@ describe('CheckoutService callback', () => {
     expect(tx.cart.updateMany).toHaveBeenCalledWith({
       where: { id: cart.id, status: 'ACTIVE' }, data: { status: 'CHECKED_OUT' },
     });
+  });
+
+  it('completes a local mock payment without WayForPay credentials', async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+    try {
+      const pending = {
+        id: 'order-1', userId: 'user-1', status: 'PENDING', cartId: 'cart-1',
+        attempts: [{ id: 'attempt-1', orderId: 'order-1', status: 'CREATED' }],
+      };
+      const paid = { ...pending, status: 'PAID', paidAt: new Date(), items: [], attempts: [{ ...pending.attempts[0], status: 'APPROVED' }] };
+      const db: any = {
+        order: {
+          findUnique: jest.fn().mockResolvedValueOnce(pending).mockResolvedValueOnce(paid),
+          updateMany: jest.fn().mockResolvedValue({ count: 1 }),
+          findUniqueOrThrow: jest.fn().mockResolvedValue({ cartId: 'cart-1' }),
+        },
+        paymentAttempt: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+        cart: { updateMany: jest.fn().mockResolvedValue({ count: 1 }) },
+      };
+      db.$transaction = (fn: (client: any) => Promise<any>) => fn(db);
+      const service = new CheckoutService(db, { get: () => 'mock' } as unknown as ConfigService, gateway);
+      const result = await service.mockPayment({ userId: 'user-1', anonymousId: null }, 'order-1', 'approved');
+      expect(result.status).toBe('PAID');
+      expect(result.payment).toBeNull();
+      expect(db.paymentAttempt.updateMany).toHaveBeenCalledWith(expect.objectContaining({
+        where: { id: 'attempt-1', status: 'CREATED' },
+      }));
+      expect(db.cart.updateMany).toHaveBeenCalledTimes(1);
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv;
+    }
+  });
+
+  it('rejects mock payments outside development mode', async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'production';
+    try {
+      const service = new CheckoutService({} as any, { get: () => 'mock' } as unknown as ConfigService, gateway);
+      await expect(service.mockPayment({ userId: 'user-1', anonymousId: null }, 'order-1', 'approved')).rejects.toThrow(
+        'Mock payments are only available',
+      );
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv;
+    }
+  });
+
+  it('returns a mock payment action without gateway credentials', async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+    try {
+      const order = {
+        id: 'order-1', status: 'PENDING', currency: 'UAH',
+        subtotalMinor: 2500, shippingMinor: 0, totalMinor: 2500,
+        attempts: [{ status: 'CREATED' }],
+      };
+      const db: any = { order: { findUnique: jest.fn().mockResolvedValue(order) }, $transaction: jest.fn() };
+      const unavailableGateway = { form: jest.fn(() => { throw new Error('Gateway credentials unavailable'); }) };
+      const service = new CheckoutService(db, { get: () => 'mock' } as unknown as ConfigService, unavailableGateway as any);
+      const result = await service.create(
+        { userId: 'user-1', anonymousId: null }, {} as any,
+        '789cc69b-dfb6-47f4-9347-e69e75a2c7fd',
+      );
+      expect(result.payment).toMatchObject({
+        provider: 'mock', action: '/checkout/orders/order-1/mock-payment', method: 'POST',
+      });
+      expect(unavailableGateway.form).not.toHaveBeenCalled();
+      expect(db.$transaction).not.toHaveBeenCalled();
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv;
+    }
+  });
+
+  it('quotes existing USD products only in mock mode', async () => {
+    const previousNodeEnv = process.env.NODE_ENV;
+    process.env.NODE_ENV = 'development';
+    try {
+      const db: any = { cart: { findFirst: jest.fn().mockResolvedValue({
+        id: 'cart-1', items: [{ quantity: 1, productId: 'p1', product: {
+          title: 'Desk', currency: 'USD', price: new Prisma.Decimal('100.00'),
+        } }],
+      }) } };
+      const mockConfig = { get: (key: string) => key === 'PAYMENT_MODE' ? 'mock'
+        : key === 'MOCK_SHIPPING_RATES_MINOR_JSON' ? '{"USD":{"US":6000}}' : undefined } as unknown as ConfigService;
+      const mockService = new CheckoutService(db, mockConfig, gateway);
+      expect(await mockService.quote({ userId: 'user-1', anonymousId: null }, 'US')).toMatchObject({
+        currency: 'USD', subtotalMinor: 10000, shippingMinor: 6000, totalMinor: 16000,
+      });
+      const liveService = new CheckoutService(db, { get: () => undefined } as unknown as ConfigService, gateway);
+      await expect(liveService.quote({ userId: 'user-1', anonymousId: null }, 'US')).rejects.toThrow(
+        'Checkout currency is not supported',
+      );
+    } finally {
+      process.env.NODE_ENV = previousNodeEnv;
+    }
   });
 });

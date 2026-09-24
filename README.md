@@ -34,6 +34,52 @@ $ pnpm install
 
 ## Environment
 
+### Secure checkout (WayForPay)
+
+Copy the checkout settings from `.env.example` and supply real merchant credentials. The payment is charged in UAH. `CHECKOUT_SHIPPING_RATES_UAH_JSON` contains country codes and shipping charges in kopiykas; checkout rejects unconfigured countries and products not priced in UAH. Configure the real shipping charge for every supported destination before accepting orders. The current implementation does not calculate VAT, sales tax, import duties or inventory reservations; settle those policies before enabling a country.
+
+Apply the Prisma migration and generate the client before running the API:
+
+```bash
+pnpm exec prisma migrate deploy
+pnpm exec prisma generate
+```
+
+Guest cart tokens are bearer credentials. Store them privately and send them in `x-cart-token`; the former `x-anonymous-id` header is no longer accepted. Authenticated callers can use their JWT without a cart token. The callback route must be reachable over HTTPS at `WAYFORPAY_SERVICE_URL`.
+
+| Method | Endpoint | Purpose |
+| --- | --- | --- |
+| `POST` | `/cart/session` | Create a signed guest cart token. |
+| `POST` | `/cart/items` | Add an item (`productId`, `quantity`). |
+| `GET` | `/cart` | Current cart and server-side current prices. |
+| `PATCH` | `/cart/items/:itemId/quantity` | Body: `{ "action": "increase" }` or `decrease`. |
+| `DELETE` | `/cart/items/:itemId` | Remove an item from the caller's cart. |
+| `GET` | `/checkout/quote?country=DE` | Current UAH item and shipping amounts in kopiykas. |
+| `POST` | `/checkout` | Create frozen order; requires `Idempotency-Key` UUID and shipping/customer body below. |
+| `GET` | `/checkout/orders/:id` | Read own order status and items. |
+| `POST` | `/checkout/orders/:id/retry` | New payment attempt only after an explicit failed callback. |
+| `POST` | `/checkout/wayforpay/webhook` | WayForPay callback, HMAC verified; never call from the browser. |
+
+`POST /checkout` body:
+
+```json
+{
+  "customerEmail": "buyer@example.com",
+  "customerFirstName": "Ada",
+  "customerLastName": "Lovelace",
+  "customerPhone": "+123456789",
+  "shippingCountry": "DE",
+  "shippingAddress": "Example Str. 1",
+  "shippingCity": "Berlin",
+  "shippingRegion": "Berlin",
+  "shippingPostalCode": "10115"
+}
+```
+
+The response includes `orderId`, totals in kopiykas, and `payment: { action, method, fields }`. Submit `fields` as an HTML POST form to the supplied `action`; array values use the form names `productName[]`, `productCount[]` and `productPrice[]`. Never treat a browser redirect as proof of payment: poll `GET /checkout/orders/:id` until the verified callback sets `PAID`. The same idempotency key returns the same order and payment attempt. A failed attempt can be retried using the retry endpoint; pending attempts cannot be retried.
+
+The server checks the WayForPay callback signature, merchant, amount, currency, and payment reference before changing order state. Repeated callbacks are safe. Card data is handled only on WayForPay's hosted page.
+
 Image uploads use Supabase Storage bucket `product-images`.
 
 ```bash

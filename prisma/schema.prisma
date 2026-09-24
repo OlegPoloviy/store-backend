@@ -69,6 +69,7 @@ model Product {
   images                ProductImage[]
   favorites             Favorite[]
   cartItems             CartItem[]
+  orderItems            OrderItem[]
 
   collectionItems CollectionItem[]
 }
@@ -114,6 +115,7 @@ model User {
   // Relations
   favorites Favorite[]
   carts     Cart[]
+  orders    Order[]
   collections Collection[]
   supportTelegramAdmin SupportTelegramAdmin?
 }
@@ -124,6 +126,7 @@ model Cart {
   anonymousId  String?     
   status       CartStatus  @default(ACTIVE)
   items        CartItem[]
+  orders       Order[]
   user         User?       @relation(fields: [userId], references: [id])
 
   createdAt    DateTime    @default(now())
@@ -139,6 +142,7 @@ model CartItem {
   productId     String
   quantity      Int      @default(1)
   priceSnapshot Decimal  @db.Decimal(10,2)  // збережена ціна на момент додавання
+  currencySnapshot String @db.VarChar(3)
 
   cart          Cart     @relation(fields: [cartId], references: [id])
   product       Product  @relation(fields: [productId], references: [id])
@@ -198,6 +202,87 @@ enum CartStatus {
   ACTIVE
   CHECKED_OUT
   EXPIRED
+}
+
+enum OrderStatus {
+  PENDING
+  PAID
+  FAILED
+  REFUNDED
+}
+
+enum PaymentAttemptStatus {
+  CREATED
+  APPROVED
+  DECLINED
+  REFUNDED
+}
+
+model Order {
+  id                 String      @id @default(uuid())
+  userId             String?
+  anonymousIdHash    String?
+  cartId             String
+  idempotencyKeyHash String      @unique
+  status             OrderStatus @default(PENDING)
+  currency           String      @db.VarChar(3)
+  subtotalMinor      Int
+  shippingMinor      Int
+  totalMinor         Int
+  shippingCountry    String      @db.VarChar(2)
+  shippingAddress    String
+  shippingCity       String
+  shippingRegion     String?
+  shippingPostalCode String
+  customerEmail      String
+  customerFirstName  String
+  customerLastName   String
+  customerPhone      String?
+  paidAt             DateTime?
+  createdAt          DateTime    @default(now())
+  updatedAt          DateTime    @updatedAt
+
+  user               User?       @relation(fields: [userId], references: [id])
+  cart               Cart        @relation(fields: [cartId], references: [id])
+  items              OrderItem[]
+  attempts           PaymentAttempt[]
+
+  @@index([userId])
+  @@index([anonymousIdHash])
+  @@index([cartId])
+}
+
+model OrderItem {
+  id             String  @id @default(uuid())
+  orderId        String
+  productId      String?
+  productTitle   String
+  quantity       Int
+  unitPriceMinor Int
+  totalMinor     Int
+  currency       String  @db.VarChar(3)
+
+  order          Order    @relation(fields: [orderId], references: [id], onDelete: Cascade)
+  product        Product? @relation(fields: [productId], references: [id], onDelete: SetNull)
+
+  @@index([orderId])
+}
+
+model PaymentAttempt {
+  id                String               @id @default(uuid())
+  orderId           String
+  reference         String               @unique
+  status            PaymentAttemptStatus @default(CREATED)
+  amountMinor       Int
+  currency          String               @db.VarChar(3)
+  gatewayStatus     String?
+  gatewayReasonCode String?
+  createdAt         DateTime             @default(now())
+  updatedAt         DateTime             @updatedAt
+
+  order             Order                @relation(fields: [orderId], references: [id])
+
+  @@index([orderId])
 }
 
 enum SupportConversationStatus {

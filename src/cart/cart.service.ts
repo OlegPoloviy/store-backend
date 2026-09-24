@@ -35,7 +35,7 @@ export class CartService {
 
     return this.prismaService.$transaction(async (tx) => {
       const owner = userId ? `user:${userId}` : `guest:${anonymousId}`;
-      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${owner}))`;
+      await tx.$queryRaw`SELECT pg_advisory_xact_lock(hashtext(${owner}))::text`;
       const whereInput = userId
         ? { userId, status: 'ACTIVE' as const }
         : { anonymousId, status: 'ACTIVE' as const };

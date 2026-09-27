@@ -11,7 +11,7 @@ export class AdminGuard implements CanActivate {
     const req = context.switchToHttp().getRequest();
     const user = req.user;
 
-    const role = user?.user_role || user?.role || user?.user_metadata?.role;
+    const role = user?.app_metadata?.role || user?.user_role || user?.role;
 
     if (!role) {
       throw new ForbiddenException('No role provided');

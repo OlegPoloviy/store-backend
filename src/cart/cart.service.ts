@@ -22,7 +22,7 @@ export class CartService {
       where: {
         id: productId,
       },
-      select: { id: true, price: true, images: true },
+      select: { id: true, price: true, currency: true, images: true },
     });
 
     if (!product) {
@@ -66,6 +66,7 @@ export class CartService {
         productId: productId,
         quantity: quantity,
         priceSnapshot: product.price, // Фіксуємо ціну на момент додавання
+        currencySnapshot: product.currency,
       },
       include: {
         cart: {

@@ -1,12 +1,12 @@
 import { Module } from '@nestjs/common';
-import { ConfigModule } from '@nestjs/config';
-import { PrismaModule } from 'src/prisma/prisma.module';
-import { SupportChatController } from './support-chat.controller';
-import { SupportChatService } from './support-chat.service';
+import { TelegrafModule } from 'nestjs-telegraf';
+import { ConfigService } from '@nestjs/config';
 
 @Module({
-  imports: [ConfigModule, PrismaModule],
-  controllers: [SupportChatController],
-  providers: [SupportChatService],
+  imports: [
+    TelegrafModule.forRoot({
+      token: ConfigService,
+    }),
+  ],
 })
 export class SupportChatModule {}

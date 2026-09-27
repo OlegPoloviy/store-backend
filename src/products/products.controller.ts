@@ -40,6 +40,18 @@ export class ProductsController {
     return this.productsService.getAllProducts(userId);
   }
 
+  @UseGuards(OptionalJwtAuthGuard)
+  @Get('latest')
+  async getLatestProducts(
+    @Req() req: any,
+    @Query('limit') limit?: string,
+  ): Promise<any> {
+    const user = req.user;
+    const userId = user?.sub || user?.user_id || user?.id;
+
+    return this.productsService.getLatestProducts(limit, userId);
+  }
+
   @UseGuards(AuthGuard('jwt'), AdminGuard)
   @Post()
   @UseInterceptors(FilesInterceptor('images', 10))

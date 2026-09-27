@@ -64,6 +64,37 @@ export class ProductsService {
     }
   }
 
+  async getLatestProducts(limit: string | undefined, userId?: string) {
+    const parsedLimit = Number(limit);
+    const take = Number.isInteger(parsedLimit)
+      ? Math.min(Math.max(parsedLimit, 1), 24)
+      : 10;
+
+    try {
+      const products = await this.prisma.product.findMany({
+        take,
+        orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
+        include: {
+          category: true,
+          images: true,
+          favorites: userId ? { where: { userId } } : false,
+        },
+      });
+
+      return products.map((product) => {
+        const isFavorite = !!(
+          product.favorites && product.favorites.length > 0
+        );
+        const { favorites, ...rest } = product;
+        return { ...rest, isFavorite };
+      });
+    } catch (error) {
+      throw new InternalServerErrorException(
+        `Failed to retrieve latest products: ${error.message}`,
+      );
+    }
+  }
+
   async createProduct(data: CreateProductDTO, files?: Express.Multer.File[]) {
     try {
       const imageUrls = await this.uploadProductImages(files);

@@ -151,16 +151,29 @@ export class ProductsService {
       }
 
       const imageUrls = await this.uploadProductImages(files);
-      const { seatingCapacity, category, images, ...rest } = data;
-      const productData = Object.fromEntries(
+      const {
+        seatingCapacity,
+        category,
+        categoryId,
+        material,
+        images,
+        ...rest
+      } = data;
+      const productData: Prisma.ProductUpdateInput = Object.fromEntries(
         Object.entries(rest).filter(([, value]) => value !== undefined),
-      ) as Prisma.ProductUpdateInput;
+      );
+
+      if (rest.primaryMaterial === undefined && material !== undefined) {
+        productData.primaryMaterial = material;
+      }
 
       if (seatingCapacity !== undefined) {
         productData.seatingCapacity = Number(seatingCapacity);
       }
 
-      if (category !== undefined) {
+      if (categoryId !== undefined) {
+        productData.category = { connect: { id: categoryId } };
+      } else if (category !== undefined) {
         productData.category = {
           connectOrCreate: {
             where: { name: category },

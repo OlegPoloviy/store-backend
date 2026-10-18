@@ -6,6 +6,7 @@ export class UpdateProductDTO implements Partial<CreateProductDTO> {
   price?: string;
   currency?: string;
   primaryMaterial?: string;
+  material?: string;
   secondaryMaterials?: string[];
   woodTreatment?: string;
   finish?: string;
@@ -34,6 +35,7 @@ export class UpdateProductDTO implements Partial<CreateProductDTO> {
   creationDate?: string;
   story?: string;
   category?: string;
+  categoryId?: string;
   images?: {
     url: string;
     alt?: string;

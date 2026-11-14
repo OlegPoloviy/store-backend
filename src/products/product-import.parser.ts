@@ -443,7 +443,10 @@ function importRow(
   };
 }
 
-export function parseProductImport(payload: unknown) {
+export function parseProductImport(
+  payload: unknown,
+  onProgress?: (processed: number, total: number) => void,
+) {
   if (!record(payload)) throw new BadRequestException('Expected a JSON object');
   const format = payload.format === undefined ? 'catalog' : payload.format;
   if (
@@ -480,6 +483,8 @@ export function parseProductImport(payload: unknown) {
   const warnings: ImportIssue[] = [];
   const errors: ImportIssue[] = [];
   const seen = new Map<string, number>();
+  const total = payload.products.length;
+  onProgress?.(0, total);
   for (const [offset, source] of payload.products.entries()) {
     const index = offset + 1;
     let sku: string;
@@ -495,22 +500,32 @@ export function parseProductImport(payload: unknown) {
           : format === 'google-shopping'
             ? fromGoogle(source)
             : source;
-      const product = importRow(row, source, format, language, index, warnings);
+      const rowWarnings: ImportIssue[] = [];
+      const product = importRow(
+        row,
+        source,
+        format,
+        language,
+        index,
+        rowWarnings,
+      );
       sku = product.data.sku;
       const first = seen.get(sku);
       if (first !== undefined)
         throw new Error('Duplicate SKU already present in row ' + first);
       seen.set(sku, index);
       products.push(product);
+      warnings.push(...rowWarnings);
     } catch (error) {
       errors.push({ row: index, sku, message: error.message });
     }
+    if (index % 20 === 0 || index === total) onProgress?.(index, total);
   }
   return {
     products,
     warnings,
     errors,
-    total: payload.products.length,
+    total,
     dryRun: payload.dryRun === true,
     format,
   };

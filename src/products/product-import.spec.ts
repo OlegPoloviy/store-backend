@@ -221,4 +221,41 @@ describe('POST /products/import', () => {
     });
     expect(transaction).not.toHaveBeenCalled();
   });
+
+  it('streams validation progress and a report with one-based row errors', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/products/import')
+      .set('Authorization', 'ADMIN')
+      .set('Accept', 'application/x-ndjson')
+      .send({ ...payload, products: [catalogRow, catalogRow] })
+      .expect(200)
+      .expect('Content-Type', /application\/x-ndjson/);
+
+    const events = response.text
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    expect(events).toEqual([
+      { type: 'progress', phase: 'validating', processed: 0, total: 2 },
+      { type: 'progress', phase: 'validating', processed: 2, total: 2 },
+      {
+        type: 'report',
+        report: {
+          total: 2,
+          valid: 1,
+          imported: 0,
+          dryRun: true,
+          warnings: [],
+          errors: [
+            {
+              row: 2,
+              sku: catalogRow.sku,
+              message: 'Duplicate SKU already present in row 1',
+            },
+          ],
+        },
+      },
+    ]);
+    expect(transaction).not.toHaveBeenCalled();
+  });
 });

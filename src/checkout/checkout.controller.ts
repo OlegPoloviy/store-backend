@@ -1,4 +1,14 @@
-import { Body, Controller, Get, Headers, Param, Post, Query, Req, UseGuards } from '@nestjs/common';
+import {
+  Body,
+  Controller,
+  Get,
+  Headers,
+  Param,
+  Post,
+  Query,
+  Req,
+  UseGuards,
+} from '@nestjs/common';
 import { OptionalJwtAuthGuard } from 'src/guards/optional.guard';
 import { CartSessionService } from 'src/cart/cart-session.service';
 import { CheckoutService } from './checkout.service';
@@ -22,7 +32,11 @@ export class CheckoutController {
 
   @UseGuards(OptionalJwtAuthGuard)
   @Get('quote')
-  quote(@Req() req: any, @Headers('x-cart-token') cartToken: string, @Query('country') country: string) {
+  quote(
+    @Req() req: any,
+    @Headers('x-cart-token') cartToken: string,
+    @Query('country') country: string,
+  ) {
     return this.checkout.quote(this.customer(req, cartToken), country);
   }
 
@@ -34,18 +48,30 @@ export class CheckoutController {
     @Headers('idempotency-key') idempotencyKey: string,
     @Body() dto: CreateCheckoutDto,
   ) {
-    return this.checkout.create(this.customer(req, cartToken), dto, idempotencyKey);
+    return this.checkout.create(
+      this.customer(req, cartToken),
+      dto,
+      idempotencyKey,
+    );
   }
 
   @UseGuards(OptionalJwtAuthGuard)
   @Get('orders/:id')
-  get(@Req() req: any, @Headers('x-cart-token') cartToken: string, @Param('id') id: string) {
+  get(
+    @Req() req: any,
+    @Headers('x-cart-token') cartToken: string,
+    @Param('id') id: string,
+  ) {
     return this.checkout.get(this.customer(req, cartToken), id);
   }
 
   @UseGuards(OptionalJwtAuthGuard)
   @Post('orders/:id/retry')
-  retry(@Req() req: any, @Headers('x-cart-token') cartToken: string, @Param('id') id: string) {
+  retry(
+    @Req() req: any,
+    @Headers('x-cart-token') cartToken: string,
+    @Param('id') id: string,
+  ) {
     return this.checkout.retry(this.customer(req, cartToken), id);
   }
 
@@ -57,7 +83,11 @@ export class CheckoutController {
     @Param('id') id: string,
     @Body() dto: MockPaymentDto,
   ) {
-    return this.checkout.mockPayment(this.customer(req, cartToken), id, dto.outcome);
+    return this.checkout.mockPayment(
+      this.customer(req, cartToken),
+      id,
+      dto.outcome,
+    );
   }
 
   @Post('wayforpay/webhook')

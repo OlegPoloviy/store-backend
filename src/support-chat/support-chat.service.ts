@@ -150,10 +150,11 @@ export class SupportChatService implements OnModuleInit, OnModuleDestroy {
   }
 
   async getConversationMessages(conversationId: string) {
-    const conversation = await this.prismaService.supportConversation.findUnique({
-      where: { id: conversationId },
-      select: { id: true },
-    });
+    const conversation =
+      await this.prismaService.supportConversation.findUnique({
+        where: { id: conversationId },
+        select: { id: true },
+      });
 
     if (!conversation) {
       throw new NotFoundException('Support conversation not found');
@@ -265,7 +266,9 @@ export class SupportChatService implements OnModuleInit, OnModuleDestroy {
     const replyToMessageId = ctx.message?.reply_to_message?.message_id;
 
     if (!chatId || !replyToMessageId) {
-      await ctx.reply('Reply to a customer message from this bot to send an answer.');
+      await ctx.reply(
+        'Reply to a customer message from this bot to send an answer.',
+      );
       return;
     }
 
@@ -286,27 +289,30 @@ export class SupportChatService implements OnModuleInit, OnModuleDestroy {
       return;
     }
 
-    const delivery = await this.prismaService.supportTelegramDelivery.findUnique({
-      where: {
-        telegramChatId_telegramMessageId: {
-          telegramChatId: BigInt(chatId),
-          telegramMessageId: replyToMessageId,
+    const delivery =
+      await this.prismaService.supportTelegramDelivery.findUnique({
+        where: {
+          telegramChatId_telegramMessageId: {
+            telegramChatId: BigInt(chatId),
+            telegramMessageId: replyToMessageId,
+          },
         },
-      },
-      select: {
-        message: {
-          select: {
-            conversationId: true,
-            conversation: {
-              select: { status: true },
+        select: {
+          message: {
+            select: {
+              conversationId: true,
+              conversation: {
+                select: { status: true },
+              },
             },
           },
         },
-      },
-    });
+      });
 
     if (!delivery) {
-      await ctx.reply('I cannot find the customer conversation for this reply.');
+      await ctx.reply(
+        'I cannot find the customer conversation for this reply.',
+      );
       return;
     }
 
@@ -389,13 +395,15 @@ export class SupportChatService implements OnModuleInit, OnModuleDestroy {
   }
 
   private async findOpenConversation(conversationId: string) {
-    const conversation = await this.prismaService.supportConversation.findFirst({
-      where: {
-        id: conversationId,
-        status: 'OPEN',
+    const conversation = await this.prismaService.supportConversation.findFirst(
+      {
+        where: {
+          id: conversationId,
+          status: 'OPEN',
+        },
+        select: { id: true },
       },
-      select: { id: true },
-    });
+    );
 
     if (!conversation) {
       throw new NotFoundException('Open support conversation not found');

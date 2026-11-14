@@ -6,6 +6,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { Test } from '@nestjs/testing';
 import { json } from 'express';
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- Supertest exports a callable CommonJS module.
 import request = require('supertest');
 import { PrismaService } from '../prisma/prisma.service';
 import { ProductImportController } from './product-import.controller';

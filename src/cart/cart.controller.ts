@@ -46,15 +46,16 @@ export class CartController {
     // але зазвичай його генерують на клієнті при старті сесії.
     // Якщо прийшов null для обох - сервіс викине помилку.
 
-    return this.cartService.addToCart(userId, this.cartSession.parse(cartToken), dto);
+    return this.cartService.addToCart(
+      userId,
+      this.cartSession.parse(cartToken),
+      dto,
+    );
   }
 
   @UseGuards(OptionalJwtAuthGuard)
   @Get()
-  async getCart(
-    @Headers('x-cart-token') cartToken: string,
-    @Req() req: any,
-  ) {
+  async getCart(@Headers('x-cart-token') cartToken: string, @Req() req: any) {
     const user = req.user;
     const userId = user?.sub || user?.user_id || user?.id;
 
@@ -71,7 +72,11 @@ export class CartController {
     const user = req.user;
     const userId = user?.sub || user?.user_id || user?.id;
 
-    return this.cartService.removeItem(userId, this.cartSession.parse(cartToken), itemId);
+    return this.cartService.removeItem(
+      userId,
+      this.cartSession.parse(cartToken),
+      itemId,
+    );
   }
 
   @UseGuards(OptionalJwtAuthGuard)

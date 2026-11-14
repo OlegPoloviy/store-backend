@@ -42,7 +42,7 @@ export class CollectionsService {
       });
 
       return collections;
-    } catch (error) {
+    } catch {
       throw new NotFoundException('Cant found any collections for this user');
     }
   }

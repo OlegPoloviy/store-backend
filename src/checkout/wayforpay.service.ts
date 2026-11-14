@@ -28,7 +28,8 @@ export class WayForPayService {
 
   private httpsUrl(name: string): string {
     const value = this.value(name);
-    if (!value.startsWith('https://')) throw new Error(`${name} must use HTTPS`);
+    if (!value.startsWith('https://'))
+      throw new Error(`${name} must use HTTPS`);
     return value;
   }
 
@@ -41,7 +42,9 @@ export class WayForPayService {
   form(order: Order & { items: OrderItem[] }, attempt: PaymentAttempt) {
     const productName = order.items.map((item) => item.productTitle);
     const productCount = order.items.map((item) => item.quantity);
-    const productPrice = order.items.map((item) => fromMinor(item.unitPriceMinor));
+    const productPrice = order.items.map((item) =>
+      fromMinor(item.unitPriceMinor),
+    );
     if (order.shippingMinor > 0) {
       productName.push('Shipping');
       productCount.push(1);
@@ -80,11 +83,18 @@ export class WayForPayService {
       ...productCount,
       ...productPrice,
     ]);
-    return { action: 'https://secure.wayforpay.com/pay', method: 'POST', fields: { ...fields, merchantSignature } };
+    return {
+      action: 'https://secure.wayforpay.com/pay',
+      method: 'POST',
+      fields: { ...fields, merchantSignature },
+    };
   }
 
   verify(callback: WayForPayCallback, amountMinor: number): void {
-    if (callback.merchantAccount !== this.value('WAYFORPAY_MERCHANT_ACCOUNT') || callback.currency !== 'UAH') {
+    if (
+      callback.merchantAccount !== this.value('WAYFORPAY_MERCHANT_ACCOUNT') ||
+      callback.currency !== 'UAH'
+    ) {
       throw new BadRequestException('Invalid payment merchant or currency');
     }
     const signature = this.sign([
@@ -99,7 +109,10 @@ export class WayForPayService {
     ]);
     const expected = Buffer.from(signature, 'ascii');
     const received = Buffer.from(callback.merchantSignature || '', 'ascii');
-    if (expected.length !== received.length || !timingSafeEqual(expected, received)) {
+    if (
+      expected.length !== received.length ||
+      !timingSafeEqual(expected, received)
+    ) {
       throw new BadRequestException('Invalid payment signature');
     }
     if (toMinor(callback.amount) !== amountMinor) {
@@ -110,6 +123,11 @@ export class WayForPayService {
   acknowledge(reference: string) {
     const time = Math.floor(Date.now() / 1000);
     const status = 'accept';
-    return { orderReference: reference, status, time, signature: this.sign([reference, status, time]) };
+    return {
+      orderReference: reference,
+      status,
+      time,
+      signature: this.sign([reference, status, time]),
+    };
   }
 }

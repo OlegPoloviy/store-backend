@@ -9,7 +9,9 @@ export class CartSessionService {
   private secret(): string {
     const value = this.config.get<string>('CART_SESSION_SECRET');
     if (!value || value.length < 32) {
-      throw new Error('CART_SESSION_SECRET must contain at least 32 characters');
+      throw new Error(
+        'CART_SESSION_SECRET must contain at least 32 characters',
+      );
     }
     return value;
   }
@@ -27,7 +29,10 @@ export class CartSessionService {
     }
     const expected = Buffer.from(this.sign(parts[0]), 'ascii');
     const received = Buffer.from(parts[1], 'ascii');
-    if (expected.length !== received.length || !timingSafeEqual(expected, received)) {
+    if (
+      expected.length !== received.length ||
+      !timingSafeEqual(expected, received)
+    ) {
       throw new BadRequestException('Invalid cart token');
     }
     return parts[0];

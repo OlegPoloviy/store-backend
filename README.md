@@ -94,6 +94,66 @@ Mock approval produces `PAID`; mock decline produces `FAILED`, after which `/ret
 
 Image uploads use Supabase Storage bucket `product-images`.
 
+### Batch product import
+
+`POST /products/import` requires an admin JWT. Send a UTF-8 JSON request with
+`Content-Type: application/json` or upload the same JSON as a multipart field
+named `file`. Each request accepts up to 5 MiB and 500 products. The import
+uses Node.js 22.12 or later.
+
+```json
+{
+  "format": "catalog",
+  "locale": "en-GB",
+  "dryRun": true,
+  "products": [
+    {
+      "sku": "KM-001",
+      "title": "Oak bench",
+      "description": "<p>Made from solid oak.</p>",
+      "price": "179.90",
+      "currency": "EUR",
+      "category": "Benches",
+      "images": ["https://example.com/images/oak-bench.jpg"],
+      "identifier_exists": false,
+      "is_made_to_order": true,
+      "production_time_days": "10-14",
+      "production_day_type": "business"
+    }
+  ]
+}
+```
+
+- `catalog` accepts the fields above and optional `brand`, `slug`, `link`, `color`,
+  `original_price`, `is_published`, `availability`, `availability_date` (ISO timestamp
+  with timezone), `gtin` and `mpn`. Use `business` or `calendar` for production days.
+  An integer such as `14` sets both ends of the range. If supplied, the first photo
+  is the main image. Preserve SKUs and GTINs as strings to retain leading zeroes.
+- `horoshop` accepts worksheet rows converted to JSON objects keyed by the original
+  column headers. For example, choose `locale: "uk"` for `Название(UA)` and
+  `Описание товара(UA)`. The selected locale needs a title and description.
+  The supplied spreadsheet has Ukrainian and Russian copy. To publish an English
+  version, import English copy with the same SKUs and `locale: "en"`. The service
+  merges localized titles and descriptions, and the selected locale becomes the
+  product's primary language. The source data keeps the original columns and HTML.
+  `Під замовлення` sets the made-to-order flag. Missing production lead times
+  generate row warnings. A Google availability value can be supplied explicitly.
+- `google-shopping` accepts JSON rows with Google Shopping attribute names,
+  optionally prefixed with `g:`. It maps `id` to SKU, parses prices such as
+  `179.90 EUR`, and uses `image_link` followed by `additional_image_link`.
+  Set `category`, `product_type`, or `google_product_category`. HTML descriptions
+  are cleaned for catalog display. Google XML feeds and Excel workbooks can be
+  converted to these JSON row formats before submitting.
+
+`dryRun: true` returns validation results without database writes. A live
+request with row errors returns `422` and imports zero products. Reports
+contain `total`, `valid`, `imported`, `dryRun`, `errors` and `warnings`, with
+one-based product indexes. A successful live request writes the whole batch
+in one transaction. The SKU identifies existing records, retaining their UUID.
+Existing catalog records can be linked before importing by explicitly assigning
+their corresponding SKUs. The import creates missing category names and stores
+image URLs in the supplied order. It preserves prices and currencies as provided.
+
 ```bash
 SUPABASE_URL="https://your-project-ref.supabase.co"
 SUPABASE_SERVICE_ROLE_KEY="your-service-role-key"

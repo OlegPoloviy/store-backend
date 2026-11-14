@@ -1,9 +1,12 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
+import { json } from 'express';
+import { MAX_IMPORT_BYTES } from './products/product-import.parser';
 
 async function bootstrap() {
   const app = await NestFactory.create(AppModule);
+  app.use('/products/import', json({ limit: MAX_IMPORT_BYTES }));
 
   if (
     process.env.PAYMENT_MODE === 'mock' &&

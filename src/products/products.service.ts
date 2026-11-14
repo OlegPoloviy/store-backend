@@ -12,6 +12,15 @@ import { DmsService } from 'src/dms/dms.service';
 import type { Express } from 'express';
 import { Prisma } from 'generated/prisma';
 
+const catalogImages = {
+  orderBy: [
+    { isMain: 'desc' },
+    { position: 'asc' },
+    { createdAt: 'asc' },
+    { id: 'asc' },
+  ],
+} satisfies Prisma.Product$imagesArgs;
+
 @Injectable()
 export class ProductsService {
   constructor(
@@ -37,9 +46,10 @@ export class ProductsService {
   async getAllProducts(userId?: string) {
     try {
       const products = await this.prisma.product.findMany({
+        where: { isPublished: true },
         include: {
           category: true,
-          images: true,
+          images: catalogImages,
           favorites: userId
             ? {
                 where: { userId },
@@ -72,11 +82,12 @@ export class ProductsService {
 
     try {
       const products = await this.prisma.product.findMany({
+        where: { isPublished: true },
         take,
         orderBy: [{ createdAt: 'desc' }, { id: 'desc' }],
         include: {
           category: true,
-          images: true,
+          images: catalogImages,
           favorites: userId ? { where: { userId } } : false,
         },
       });
@@ -183,10 +194,14 @@ export class ProductsService {
       }
 
       const shouldReplaceImages = images !== undefined;
+      const externalUrls = new Set(
+        product.images.filter((image) => !image.managed).map((image) => image.url),
+      );
       const nextImageData = [
         ...(images || []).map((image) => ({
           url: image.url,
           altText: image.alt || data.title || product.title,
+          ...(externalUrls.has(image.url) && { managed: false }),
         })),
         ...imageUrls.map((url) => ({
           url,
@@ -217,6 +232,7 @@ export class ProductsService {
       if (shouldReplaceImages) {
         const nextImageUrls = new Set(nextImageData.map((image) => image.url));
         const removedImageUrls = product.images
+          .filter((image) => image.managed !== false)
           .map((image) => image.url)
           .filter((url) => !nextImageUrls.has(url));
 
@@ -241,6 +257,7 @@ export class ProductsService {
     try {
       const products = await this.prisma.product.findMany({
         where: {
+          isPublished: true,
           category: {
             name: {
               equals: category,
@@ -250,7 +267,7 @@ export class ProductsService {
         },
         include: {
           category: true,
-          images: true,
+          images: catalogImages,
           // Перевірка favorites
           favorites: userId ? { where: { userId } } : false,
         },
@@ -271,10 +288,10 @@ export class ProductsService {
   async getProductById(id: string, userId?: string) {
     try {
       const product = await this.prisma.product.findUnique({
-        where: { id },
+        where: { id, isPublished: true },
         include: {
           category: true,
-          images: true,
+          images: catalogImages,
           // Перевірка favorites
           favorites: userId ? { where: { userId } } : false,
         },
@@ -307,7 +324,7 @@ export class ProductsService {
       }
 
       await this.dms.deleteFilesByUrls(
-        product.images.map((image) => image.url),
+        product.images.filter((image) => image.managed).map((image) => image.url),
       );
 
       await this.prisma.$transaction([

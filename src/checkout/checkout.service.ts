@@ -80,6 +80,9 @@ export class CheckoutService {
     }
     let subtotalMinor = 0;
     const items = cart.items.map((item) => {
+      if (item.product.isPublished === false || item.product.availability === 'OUT_OF_STOCK') {
+        throw new BadRequestException('A product in the cart is no longer available');
+      }
       if (item.product.currency !== currency) {
         throw new BadRequestException('Cart items must use the same currency');
       }

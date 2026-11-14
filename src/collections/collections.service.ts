@@ -81,6 +81,7 @@ export class CollectionsService {
       },
       include: {
         collectionItems: {
+          where: { product: { isPublished: true } },
           include: {
             product: {
               include: {

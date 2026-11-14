@@ -20,12 +20,41 @@ enum user_role {
   USER
 }
 
+enum ProductAvailability {
+  IN_STOCK
+  OUT_OF_STOCK
+  PREORDER
+  BACKORDER
+}
+
+enum ProductionDayType {
+  BUSINESS
+  CALENDAR
+}
+
 model Product {
   id                    String          @id @default(uuid())
+  sku                   String?         @unique
   title                 String
   description           String?         @db.Text 
   price                 Decimal         @db.Decimal(10, 2)
   currency              String          @db.VarChar(10)
+  brand                 String          @default("KarpatMaster")
+  locale                String?
+  slug                  String?
+  link                  String?
+  originalPrice         Decimal?        @db.Decimal(10, 2)
+  translations          Json?
+  isPublished           Boolean         @default(true)
+  availability          ProductAvailability?
+  availabilityDate      DateTime?
+  gtin                  String?
+  mpn                   String?
+  identifierExists      Boolean?
+  isMadeToOrder         Boolean         @default(false)
+  productionTimeMinDays Int?
+  productionTimeMaxDays Int?
+  productionDayType     ProductionDayType?
 
   primaryMaterial       String?         
   secondaryMaterials    String[]        
@@ -70,6 +99,7 @@ model Product {
   favorites             Favorite[]
   cartItems             CartItem[]
   orderItems            OrderItem[]
+  importSources         ProductImportSource[]
 
   collectionItems CollectionItem[]
 }
@@ -86,6 +116,8 @@ model ProductImage {
   url       String
   altText   String?
   isMain    Boolean  @default(false)
+  position  Int      @default(0)
+  managed   Boolean  @default(true)
   createdAt DateTime @default(now())
 
   // Relations
@@ -93,6 +125,14 @@ model ProductImage {
   productId String
 }
 
+model ProductImportSource {
+  productId String
+  format    String
+  data      Json
+  product   Product @relation(fields: [productId], references: [id], onDelete: Cascade)
+
+  @@id([productId, format])
+}
 
 model User {
   id    String  @id @default(uuid())

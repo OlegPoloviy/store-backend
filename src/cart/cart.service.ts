@@ -22,11 +22,14 @@ export class CartService {
       where: {
         id: productId,
       },
-      select: { id: true, price: true, currency: true, images: true },
+      select: { id: true, price: true, currency: true, images: true, isPublished: true, availability: true },
     });
 
-    if (!product) {
+    if (!product || product.isPublished === false) {
       throw new NotFoundException('Requested product not found!');
+    }
+    if (product.availability === 'OUT_OF_STOCK') {
+      throw new BadRequestException('Product is out of stock');
     }
 
     if (!userId && !anonymousId) {

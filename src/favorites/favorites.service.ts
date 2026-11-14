@@ -14,7 +14,7 @@ export class FavoritesService {
   async getAllFavoriteProducts(userId: string): Promise<Product[]> {
     try {
       const favorites = await this.prisma.favorite.findMany({
-        where: { userId },
+        where: { userId, product: { isPublished: true } },
         include: {
           product: {
             include: {
@@ -44,7 +44,7 @@ export class FavoritesService {
 
       // Verify product exists
       const product = await this.prisma.product.findUnique({
-        where: { id: productId },
+        where: { id: productId, isPublished: true },
       });
 
       if (!product) {

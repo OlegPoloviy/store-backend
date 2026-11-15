@@ -7,7 +7,7 @@ import {
 import sanitizeHtml = require('sanitize-html');
 
 export const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
-const MAX_PRODUCTS = 500;
+export const MAX_PRODUCTS = 500;
 
 export type ImportFormat = 'catalog' | 'horoshop' | 'google-shopping';
 type Row = Record<string, unknown>;
@@ -268,9 +268,14 @@ function googlePrice(value: unknown, field: string) {
 }
 
 function fromGoogle(row: Row) {
-  const fields = Object.fromEntries(
-    Object.entries(row).map(([key, value]) => [key.replace(/^g:/, ''), value]),
-  );
+  const fields = {
+    ...row,
+    ...Object.fromEntries(
+      Object.entries(row)
+        .filter(([key]) => key.startsWith('g:'))
+        .map(([key, value]) => [key.slice(2), value]),
+    ),
+  };
   const regular = googlePrice(fields.price, 'price');
   const sale = missing(fields.sale_price)
     ? undefined

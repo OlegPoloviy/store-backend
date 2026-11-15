@@ -6,6 +6,7 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { Test } from '@nestjs/testing';
 import { json } from 'express';
+import { join } from 'node:path';
 import request = require('supertest');
 import { PrismaService } from '../prisma/prisma.service';
 import { ProductImportController } from './product-import.controller';
@@ -218,6 +219,139 @@ describe('POST /products/import', () => {
       valid: 1,
       imported: 0,
       errors: [{ row: 2, sku: catalogRow.sku }],
+    });
+    expect(transaction).not.toHaveBeenCalled();
+  });
+
+  it.each([
+    ['csv', ';'],
+    ['csv', ','],
+    ['tsv', '\t'],
+  ])(
+    'validates a %s upload with delimiter %j',
+    async (extension, delimiter) => {
+      const headers = [
+        'sku',
+        'title',
+        'description',
+        'price',
+        'currency',
+        'category',
+        'images',
+      ];
+      const values = [
+        '00123',
+        '"Oak, bench"',
+        '"<p>Solid\noak.</p>"',
+        '"179,90"',
+        'EUR',
+        'Benches',
+        '"' + catalogRow.images.join(';') + '"',
+      ];
+      const data =
+        '\uFEFF' +
+        headers.join(delimiter) +
+        '\r\n' +
+        values.join(delimiter) +
+        '\r\n' +
+        values.join(delimiter);
+      const response = await request(app.getHttpServer())
+        .post('/products/import?locale=en-GB&dryRun=true')
+        .set('Authorization', 'ADMIN')
+        .attach('file', Buffer.from(data), 'catalog.' + extension)
+        .expect(200);
+      expect(response.body).toMatchObject({
+        valid: 1,
+        imported: 0,
+        errors: [{ row: 2, sku: '00123' }],
+      });
+    },
+  );
+
+  it('detects Horoshop by the headers even when the first product is missing a SKU', async () => {
+    const csv = [
+      'Артикул,Назва(UA),Опис товару(UA),Ціна,Валюта,Розділ,Фото',
+      ',Лавка,Дуб,11800,UAH,Лавки,https://example.com/bench.jpg',
+      '001,Лавка,Дуб,11800,UAH,Лавки,https://example.com/bench.jpg',
+    ].join('\n');
+    const response = await request(app.getHttpServer())
+      .post('/products/import?locale=uk&dryRun=true')
+      .set('Authorization', 'ADMIN')
+      .attach('file', Buffer.from(csv), 'horoshop.csv')
+      .expect(200);
+    expect(response.body).toMatchObject({
+      total: 2,
+      valid: 1,
+      errors: [{ row: 1, message: expect.stringContaining('sku') }],
+    });
+  });
+
+  it('validates the first Excel worksheet with shared strings and sparse cells', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/products/import?locale=en-GB&dryRun=true')
+      .set('Authorization', 'ADMIN')
+      .attach(
+        'file',
+        join(__dirname, '../../test/fixtures/product-import.xlsx'),
+      )
+      .expect(200);
+    expect(response.body).toMatchObject({
+      total: 2,
+      valid: 1,
+      imported: 0,
+      errors: [
+        { row: 2, sku: '0007', message: expect.stringContaining('title') },
+      ],
+    });
+  });
+
+  it('validates an RSS upload with namespace aliases and repeated image links', async () => {
+    const xml = `<?xml version="1.0" encoding="UTF-8"?>
+      <rss xmlns:merchant="http://base.google.com/ns/1.0" version="2.0">
+        <channel><item>
+          <merchant:id>00001</merchant:id>
+          <merchant:title>Oak bench</merchant:title>
+          <merchant:description><![CDATA[<p>Oak</p>]]></merchant:description>
+          <merchant:link>https://example.com/bench</merchant:link>
+          <merchant:availability>in_stock</merchant:availability>
+          <merchant:price>179.90 EUR</merchant:price>
+          <merchant:product_type>Benches</merchant:product_type>
+          <merchant:image_link>${catalogRow.images[0]}</merchant:image_link>
+          <merchant:additional_image_link>${catalogRow.images[1]}</merchant:additional_image_link>
+          <merchant:additional_image_link>https://example.com/detail.jpg</merchant:additional_image_link>
+        </item></channel>
+      </rss>`;
+    const response = await request(app.getHttpServer())
+      .post('/products/import?locale=en-GB&dryRun=true')
+      .set('Authorization', 'ADMIN')
+      .set('Accept', 'application/x-ndjson')
+      .attach('file', Buffer.from(xml), 'feed.xml')
+      .expect(200)
+      .expect('Content-Type', /application\/x-ndjson/);
+    const events = response.text
+      .trim()
+      .split('\n')
+      .map((line) => JSON.parse(line));
+    expect(events.at(-1)).toMatchObject({
+      type: 'report',
+      report: { total: 1, valid: 1, imported: 0, errors: [] },
+    });
+  });
+
+  it('can preview a JSON file using the query flag even when the file requests a write', async () => {
+    const response = await request(app.getHttpServer())
+      .post('/products/import?dryRun=true')
+      .set('Authorization', 'ADMIN')
+      .attach(
+        'file',
+        Buffer.from(JSON.stringify({ ...payload, dryRun: false })),
+        'catalog.json',
+      )
+      .expect(200);
+    expect(response.body).toMatchObject({
+      valid: 1,
+      dryRun: true,
+      imported: 0,
     });
     expect(transaction).not.toHaveBeenCalled();
   });

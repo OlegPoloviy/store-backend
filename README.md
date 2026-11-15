@@ -96,10 +96,37 @@ Image uploads use Supabase Storage bucket `product-images`.
 
 ### Batch product import
 
-`POST /products/import` requires an admin JWT. Send a UTF-8 JSON request with
-`Content-Type: application/json` or upload the same JSON as a multipart field
-named `file`. Each request accepts up to 5 MiB and 500 products. The import
-uses Node.js 22.12 or later.
+In the admin panel, open **Product management → Batch import**. Choose a
+file, validate it, then select **Import batch**. The dialog includes a CSV
+template for the catalog format. Each batch accepts up to 5 MiB and 500 products.
+
+`POST /products/import` requires an admin JWT and supports these inputs:
+
+- **Excel (.xlsx)** uses the first worksheet and treats the first populated row
+  as the header. Store SKUs and GTINs as text to preserve leading zeroes.
+  Save older `.xls` workbooks as `.xlsx` or CSV. Use ISO 8601 text for timestamps.
+- **CSV and TSV** use UTF-8 and a header row. CSV accepts commas, semicolons
+  or tabs. Quote cells containing delimiters or line breaks. In catalog tables,
+  separate URLs in the `images` cell with semicolons. For Google Shopping tables,
+  use semicolons in `additional_image_link`.
+- **XML** accepts Google Shopping RSS or Atom feeds and catalog XML structured
+  as `<products><product>…</product></products>`. Catalog product elements use
+  the same field names as JSON. For multiple images use
+  `<images><image>https://example.com/bench.jpg</image></images>`
+  with an `image` element per URL. Use CDATA or escaped text for HTML descriptions.
+- **JSON** accepts the object shown below as an `application/json` request
+  or a UTF-8 `.json` upload.
+
+Upload files in the multipart field `file`. For Excel, CSV, TSV and XML,
+set `locale` as a query parameter and optionally set `format` to `catalog`,
+`horoshop`, `google-shopping` or `auto` (the default). For all uploaded files,
+`?dryRun=true` validates the batch without saving it and takes precedence over
+the `dryRun` value inside a JSON file.
+
+```bash
+curl -H "Authorization: Bearer $ADMIN_JWT" -F "file=@catalog.xlsx" \
+  "http://localhost:3001/products/import?locale=uk&format=auto&dryRun=true"
+```
 
 ```json
 {
@@ -129,8 +156,8 @@ uses Node.js 22.12 or later.
   with timezone), `gtin` and `mpn`. Use `business` or `calendar` for production days.
   An integer such as `14` sets both ends of the range. If supplied, the first photo
   is the main image. Preserve SKUs and GTINs as strings to retain leading zeroes.
-- `horoshop` accepts worksheet rows converted to JSON objects keyed by the original
-  column headers. For example, choose `locale: "uk"` for `Название(UA)` and
+- `horoshop` reads the original column headers. For example, choose the locale
+  `uk` for `Название(UA)` and
   `Описание товара(UA)`. The selected locale needs a title and description.
   The supplied spreadsheet has Ukrainian and Russian copy. To publish an English
   version, import English copy with the same SKUs and `locale: "en"`. The service
@@ -138,12 +165,11 @@ uses Node.js 22.12 or later.
   product's primary language. The source data keeps the original columns and HTML.
   `Під замовлення` sets the made-to-order flag. Missing production lead times
   generate row warnings. A Google availability value can be supplied explicitly.
-- `google-shopping` accepts JSON rows with Google Shopping attribute names,
+- `google-shopping` accepts rows with Google Shopping attribute names,
   optionally prefixed with `g:`. It maps `id` to SKU, parses prices such as
   `179.90 EUR`, and uses `image_link` followed by `additional_image_link`.
   Set `category`, `product_type`, or `google_product_category`. HTML descriptions
-  are cleaned for catalog display. Google XML feeds and Excel workbooks can be
-  converted to these JSON row formats before submitting.
+  are cleaned for catalog display.
 
 `dryRun: true` returns validation results without database writes. A live
 request with row errors returns `422` and imports zero products. Reports

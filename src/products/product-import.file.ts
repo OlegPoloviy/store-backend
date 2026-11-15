@@ -2,6 +2,7 @@ import {
   BadRequestException,
   UnsupportedMediaTypeException,
 } from '@nestjs/common';
+import { createRequire } from 'node:module';
 import { extname } from 'node:path';
 import { TextDecoder } from 'node:util';
 import {
@@ -25,7 +26,7 @@ const {
       on_record?: (record: string[]) => string[];
     },
   ) => string[][];
-} = require('csv-parse/sync');
+} = createRequire(__filename)('csv-parse/sync');
 
 const googleNamespace = 'http://base.google.com/ns/1.0';
 type Row = Record<string, string | string[]>;
@@ -162,16 +163,33 @@ function tableRows([header, ...rows]: string[][]): ImportRows {
       entries.push([
         key,
         /^(?:images|(?:g:)?additional_image_link)$/.test(key)
-          ? value
-              .split(';')
-              .map((item) => item.trim())
-              .filter(Boolean)
+          ? imageList(value)
           : value,
       ]);
     }
     return Object.fromEntries(entries);
   });
   return { format: inferTableFormat(named), products };
+}
+
+function imageList(value: string): string[] {
+  if (value.trimStart().startsWith('[')) {
+    try {
+      const images: unknown = JSON.parse(value);
+      if (
+        Array.isArray(images) &&
+        images.every((image) => typeof image === 'string')
+      ) {
+        return images;
+      }
+    } catch {
+      // Fall back to the existing semicolon format and row validation.
+    }
+  }
+  return value
+    .split(';')
+    .map((url) => url.trim())
+    .filter(Boolean);
 }
 
 function inferTableFormat(keys: string[]): ImportFormat {

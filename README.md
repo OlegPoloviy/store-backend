@@ -190,6 +190,24 @@ SUPABASE_ANON_KEY="your-anon-key"
 Use a Supabase API key from Project Settings > API. Do not use the JWT secret
 as the Storage API bearer token.
 
+### Product export
+
+Open **Product management → Export products** and choose JSON, Excel (.xlsx),
+or CSV. Each download contains the whole catalog, including unpublished products
+and products without SKUs, regardless of the filters on the admin page.
+
+`GET /products/export?format=json|xlsx|csv` requires an admin JWT and returns an
+attachment. The JSON response contains a `products` array with category names,
+image URLs, image details, and translations. Excel and UTF-8 CSV use the same
+field names as column headers and represent lists and objects as JSON in cells.
+Excel preserves SKUs and GTINs as text and uses numeric cells for prices and
+measurements. CSV prefixes formula-like text with an apostrophe for spreadsheet
+safety.
+
+The export includes catalog data that the batch import does not write, such as
+dimensions and image metadata. To reuse the supported fields in an import, supply
+the batch locale and check the SKU, required fields, and batch limits.
+
 ## Compile and run the project
 
 ```bash

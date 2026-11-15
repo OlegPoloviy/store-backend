@@ -17,8 +17,8 @@ import {
 import { AuthGuard } from '@nestjs/passport';
 import { FileInterceptor } from '@nestjs/platform-express';
 import type { Request, Response } from 'express';
-import { TextDecoder } from 'node:util';
 import { AdminGuard } from '../guards/admin.guard';
+import { readProductImportFile } from './product-import.file';
 import { MAX_IMPORT_BYTES } from './product-import.parser';
 import { ProductImportService } from './product-import.service';
 
@@ -43,14 +43,8 @@ export class ProductImportController {
   ) {
     if (request.is('multipart/form-data')) {
       if (!file)
-        throw new BadRequestException('Upload a JSON file in the file field');
-      try {
-        body = JSON.parse(
-          new TextDecoder('utf-8', { fatal: true }).decode(file.buffer),
-        );
-      } catch {
-        throw new BadRequestException('File must contain valid UTF-8 JSON');
-      }
+        throw new BadRequestException('Upload a file in the file field');
+      body = await readProductImportFile(file, request.query);
     } else if (!request.is('application/json')) {
       throw new UnsupportedMediaTypeException(
         'Send application/json or multipart/form-data',

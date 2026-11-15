@@ -14,7 +14,9 @@ export class SupportChatController {
   }
 
   @Get('conversations/:conversationId/messages')
-  async getConversationMessages(@Param('conversationId') conversationId: string) {
+  async getConversationMessages(
+    @Param('conversationId') conversationId: string,
+  ) {
     return this.supportChatService.getConversationMessages(conversationId);
   }
 

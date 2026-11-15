@@ -10,7 +10,7 @@ export class UserService {
     try {
       const users = await this.prismaService.user.findMany();
       return users;
-    } catch (error) {
+    } catch {
       throw new InternalServerErrorException('Error getting all users!');
     }
   }
@@ -22,7 +22,7 @@ export class UserService {
           id: userId,
         },
       });
-    } catch (error) {
+    } catch {
       throw new InternalServerErrorException(
         `Error deleting user with id of ${userId}`,
       );

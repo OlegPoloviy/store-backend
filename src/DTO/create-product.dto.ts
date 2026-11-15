@@ -2,11 +2,9 @@ import {
   IsString,
   IsNumber,
   IsOptional,
-  IsPositive,
   MaxLength,
   IsBoolean,
   IsArray,
-  IsUUID,
   IsDateString,
   ValidateNested,
 } from 'class-validator';

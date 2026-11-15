@@ -4,6 +4,7 @@ import {
   ProductAvailability,
   ProductionDayType,
 } from 'generated/prisma';
+// eslint-disable-next-line @typescript-eslint/no-require-imports -- Keep the callable CommonJS export.
 import sanitizeHtml = require('sanitize-html');
 
 export const MAX_IMPORT_BYTES = 5 * 1024 * 1024;

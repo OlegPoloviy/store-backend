@@ -41,7 +41,14 @@ describe('CartService', () => {
 
     expect(prisma.product.findUnique).toHaveBeenCalledWith({
       where: { id: 'product-1' },
-      select: { id: true, price: true, currency: true, images: true, isPublished: true, availability: true },
+      select: {
+        id: true,
+        price: true,
+        currency: true,
+        images: true,
+        isPublished: true,
+        availability: true,
+      },
     });
     expect(upsert).toHaveBeenCalledWith(
       expect.objectContaining({

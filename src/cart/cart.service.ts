@@ -22,7 +22,14 @@ export class CartService {
       where: {
         id: productId,
       },
-      select: { id: true, price: true, currency: true, images: true, isPublished: true, availability: true },
+      select: {
+        id: true,
+        price: true,
+        currency: true,
+        images: true,
+        isPublished: true,
+        availability: true,
+      },
     });
 
     if (!product || product.isPublished === false) {
@@ -152,6 +159,7 @@ export class CartService {
     await this.prismaService.cartItem.deleteMany({
       where: {
         id: cartItemId,
+        cartId: cart.id,
       },
     });
 

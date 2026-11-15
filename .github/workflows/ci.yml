@@ -1,0 +1,67 @@
+name: Backend CI
+
+on:
+  push:
+    branches: [main]
+  pull_request:
+    branches: [main]
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+concurrency:
+  group: ci-${{ github.workflow }}-${{ github.ref }}
+  cancel-in-progress: true
+
+jobs:
+  checks:
+    runs-on: ubuntu-latest
+    timeout-minutes: 15
+    env:
+      DATABASE_URL: postgresql://ci:ci@127.0.0.1:5432/store_ci
+      DIRECT_URL: postgresql://ci:ci@127.0.0.1:5432/store_ci
+      SUPABASE_URL: https://example.invalid
+      SUPABASE_ANON_KEY: ci.test.key
+      SUPABASE_JWT_SECRET: ci-only-jwt-secret
+    services:
+      postgres:
+        image: postgres:16
+        env:
+          POSTGRES_USER: ci
+          POSTGRES_PASSWORD: ci
+          POSTGRES_DB: store_ci
+        ports:
+          - 5432:5432
+        options: >-
+          --health-cmd "pg_isready -U ci -d store_ci"
+          --health-interval 5s
+          --health-timeout 5s
+          --health-retries 10
+    steps:
+      - uses: actions/checkout@d23441a48e516b6c34aea4fa41551a30e30af803 # v6
+        with:
+          persist-credentials: false
+      - uses: pnpm/action-setup@f53f5227a9e83886ab598c617f3c170fab62f0d3 # v6
+        with:
+          version: 10.15.0
+      - uses: actions/setup-node@249970729cb0ef3589644e2896645e5dc5ba9c38 # v6
+        with:
+          node-version: '22'
+          cache: pnpm
+      - name: Install dependencies
+        run: pnpm install --frozen-lockfile --ignore-scripts
+      - name: Validate Prisma schema
+        run: pnpm exec prisma validate
+      - name: Generate Prisma Client
+        run: pnpm exec prisma generate
+      - name: Lint and check formatting
+        run: pnpm lint
+      - name: Build
+        run: pnpm build
+      - name: Unit and HTTP tests
+        run: pnpm test --runInBand
+      - name: Apply migrations to test database
+        run: pnpm exec prisma migrate deploy
+      - name: End-to-end tests
+        run: pnpm test:e2e --runInBand

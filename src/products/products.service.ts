@@ -2,8 +2,6 @@ import {
   Injectable,
   InternalServerErrorException,
   NotFoundException,
-  ConflictException,
-  BadRequestException,
 } from '@nestjs/common';
 import { PrismaService } from 'src/prisma/prisma.service';
 import { CreateProductDTO } from '../DTO/create-product.dto';
@@ -195,7 +193,9 @@ export class ProductsService {
 
       const shouldReplaceImages = images !== undefined;
       const externalUrls = new Set(
-        product.images.filter((image) => !image.managed).map((image) => image.url),
+        product.images
+          .filter((image) => !image.managed)
+          .map((image) => image.url),
       );
       const nextImageData = [
         ...(images || []).map((image) => ({
@@ -324,7 +324,9 @@ export class ProductsService {
       }
 
       await this.dms.deleteFilesByUrls(
-        product.images.filter((image) => image.managed).map((image) => image.url),
+        product.images
+          .filter((image) => image.managed)
+          .map((image) => image.url),
       );
 
       await this.prisma.$transaction([

@@ -163,8 +163,10 @@ curl -H "Authorization: Bearer $ADMIN_JWT" -F "file=@catalog.xlsx" \
   version, import English copy with the same SKUs and `locale: "en"`. The service
   merges localized titles and descriptions, and the selected locale becomes the
   product's primary language. The source data keeps the original columns and HTML.
-  `Під замовлення` sets the made-to-order flag. Missing production lead times
-  generate row warnings. A Google availability value can be supplied explicitly.
+  `Під замовлення` sets the made-to-order flag. If the import omits the
+  production lead time, the preview reports that the import will keep an
+  existing lead time or set 14 business days. A Google availability value can
+  be supplied explicitly.
 - `google-shopping` accepts rows with Google Shopping attribute names,
   optionally prefixed with `g:`. It maps `id` to SKU, parses prices such as
   `179.90 EUR`, and uses `image_link` followed by `additional_image_link`.
@@ -204,9 +206,63 @@ Excel preserves SKUs and GTINs as text and uses numeric cells for prices and
 measurements. CSV prefixes formula-like text with an apostrophe for spreadsheet
 safety.
 
-The export includes catalog data that the batch import does not write, such as
-dimensions and image metadata. To reuse the supported fields in an import, supply
-the batch locale and check the SKU, required fields, and batch limits.
+JSON, XLSX and CSV catalog exports can be imported back through Batch import.
+Each row keeps its saved locale, translations, dimensions, product details,
+image descriptions, main image and image order. Imports match by SKU when
+present and by the exported product UUID for records without a SKU. The UUID of
+a product matched by SKU, its creation timestamp and its update timestamp are
+managed by the store. Horoshop-specific source columns are kept with the original
+import source. Split any export over 500 products or 5 MiB into smaller batches
+before reimporting.
+
+### Optional currency conversion at import
+
+Select **Add USD and EUR prices for UAH products** in Batch import to fetch the
+current official NBU rates during validation. The preview shows the rate date
+and the converted amounts. Confirming the same file within 15 minutes reuses
+the rates shown in the preview. The server signs the quote with
+`CART_SESSION_SECRET`, which must contain at least 32 characters. An expired
+quote or a changed file requires a new preview. Other currencies already in the
+file keep their original amounts.
+
+Imported UAH prices remain the checkout and feed prices. The store saves USD
+and EUR as additional, approximate prices on the product, with the old prices
+when available. These amounts are a snapshot of the confirmed import and are
+recalculated only when conversion is selected on another import. A change to
+the source price clears the previous conversion. Apply the Prisma migration
+before starting the updated backend.
+
+Validation also compares the file with the current catalog. The report counts
+new, updated and unchanged products and lists the fields that would change for
+each updated product. This comparison includes converted prices, image details
+and translations. It ignores system timestamps and the retained source copy.
+
+### Estimated dispatch and Google Shopping feed
+
+`GET /products/id/:id` returns `estimatedDispatch` with `earliestDate` and
+`latestDate` as `YYYY-MM-DD` for made-to-order products available for purchase.
+Both dates are equal for a fixed lead time. The estimate uses the current date
+in `Europe/Kyiv` and the product's stored lead time, with a fallback of 14
+business days. Business days are Monday through Friday. The calculation skips
+weekends and does not apply a holiday calendar or an order cutoff.
+
+Configure `GOOGLE_SHOPPING_STORE_URL` and `GOOGLE_SHOPPING_PRODUCT_PATH` with the
+public storefront's URL and actual product route. The route template accepts
+`{id}` for the product UUID or `{slug}` for the storefront slug. Set
+`GOOGLE_SHOPPING_STORE_NAME` to use a channel name other than the storefront's
+hostname.
+
+`GET /feeds/google-shopping.xml` serves public RSS 2.0 XML generated on each
+request from the published UAH catalog. It uses the current selling price and
+includes products saved in `GOOGLE_SHOPPING_LANGUAGE` (default `uk`), including
+regional variants such as `uk-UA`. Products without a saved locale are assumed
+to use the configured language. Products missing required offer data, including
+a future availability date for preorder or backorder, are skipped. Made-to-order
+offers use the Google availability status and per-product handling time in
+business days. Made-to-order products with a calendar-day lead time are skipped
+by this feed. The storefront proxies the same path to the backend. Set country,
+language and delivery settings in Merchant Center and schedule a daily fetch of
+the deployed feed URL.
 
 ## Compile and run the project
 

@@ -5,13 +5,18 @@ import {
 } from '@nestjs/common';
 import { AuthGuard } from '@nestjs/passport';
 import { Test } from '@nestjs/testing';
-import { json } from 'express';
+import type { NestExpressApplication } from '@nestjs/platform-express';
 import { join } from 'node:path';
-import request = require('supertest');
+import * as request from 'supertest';
 import { PrismaService } from '../prisma/prisma.service';
 import { ProductImportController } from './product-import.controller';
-import { MAX_IMPORT_BYTES, parseProductImport } from './product-import.parser';
+import { parseProductImport } from './product-import.parser';
 import { ProductImportService } from './product-import.service';
+import { ProductImportCurrencyService } from './product-import-currency.service';
+import { ConfigService } from '@nestjs/config';
+import { configureBodyParsers } from '../http-body-parsers';
+import { SupportChatController } from '../support-chat/support-chat.controller';
+import { SupportChatService } from '../support-chat/support-chat.service';
 
 // Load the real sanitizer with Node because Jest 29 can't require its ESM parser.
 jest.mock('sanitize-html', () =>
@@ -133,14 +138,41 @@ describe('product import parser', () => {
 describe('POST /products/import', () => {
   let app: INestApplication;
   const transaction = jest.fn();
+  const query = jest
+    .fn()
+    .mockImplementation(async (_sql, ...parameters: unknown[]) => {
+      const input = parameters.find(
+        (parameter): parameter is string =>
+          typeof parameter === 'string' && parameter.startsWith('[{'),
+      );
+      return JSON.parse(input).map((_, index: number) => ({
+        position: index + 1,
+        productId: null,
+        changes: [],
+      }));
+    });
+  const createCustomerMessage = jest
+    .fn()
+    .mockResolvedValue({ deliveredToAdmins: 0 });
   const payload = { locale: 'en-GB', dryRun: true, products: [catalogRow] };
 
   beforeAll(async () => {
     const module = await Test.createTestingModule({
-      controllers: [ProductImportController],
+      controllers: [ProductImportController, SupportChatController],
       providers: [
         ProductImportService,
-        { provide: PrismaService, useValue: { $transaction: transaction } },
+        ProductImportCurrencyService,
+        { provide: SupportChatService, useValue: { createCustomerMessage } },
+        {
+          provide: ConfigService,
+          useValue: new ConfigService({
+            CART_SESSION_SECRET: 'test-signing-secret-for-import-123456',
+          }),
+        },
+        {
+          provide: PrismaService,
+          useValue: { $transaction: transaction, $queryRaw: query },
+        },
       ],
     })
       .overrideGuard(AuthGuard('jwt'))
@@ -153,8 +185,9 @@ describe('POST /products/import', () => {
         },
       })
       .compile();
-    app = module.createNestApplication();
-    app.use('/products/import', json({ limit: MAX_IMPORT_BYTES }));
+    const application = module.createNestApplication<NestExpressApplication>();
+    configureBodyParsers(application);
+    app = application;
     app.useGlobalPipes(
       new ValidationPipe({
         whitelist: true,
@@ -167,6 +200,25 @@ describe('POST /products/import', () => {
 
   afterAll(async () => {
     await app?.close();
+  });
+
+  it('keeps the default JSON parser for support chat when import has a larger limit', async () => {
+    await request(app.getHttpServer())
+      .post('/support-chat/messages')
+      .send({ message: 'Test message handled in memory' })
+      .expect(201);
+    await request(app.getHttpServer())
+      .post('/support-chat/messages')
+      .send({ message: 'a'.repeat(102_400) })
+      .expect(413);
+    await request(app.getHttpServer())
+      .post('/support-chat/messages')
+      .send({})
+      .expect(400);
+    expect(createCustomerMessage).toHaveBeenCalledTimes(1);
+    expect(createCustomerMessage).toHaveBeenCalledWith(
+      expect.objectContaining({ message: 'Test message handled in memory' }),
+    );
   });
 
   it('rejects unauthenticated and non-admin callers', async () => {
@@ -193,6 +245,7 @@ describe('POST /products/import', () => {
       dryRun: true,
       errors: [],
       warnings: [],
+      preview: { newCount: 1, updatedCount: 0, unchangedCount: 0, updates: [] },
     };
     const response = await request(app.getHttpServer())
       .post('/products/import')

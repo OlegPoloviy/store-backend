@@ -2,6 +2,7 @@ import { Injectable, UnprocessableEntityException } from '@nestjs/common';
 import { Prisma } from 'generated/prisma';
 import writeExcel from 'write-excel-file/node';
 import { PrismaService } from '../prisma/prisma.service';
+import { spreadsheetFormulaPrefix } from './product-catalog-fields';
 
 export const PRODUCT_EXPORT_TYPES = {
   json: 'application/json; charset=utf-8',
@@ -101,7 +102,7 @@ function tableCell(value: Prisma.JsonValue): string | number | boolean | null {
 function csvCell(value: string | number | boolean | null) {
   let text = value === null ? '' : String(value);
   // Quoting CSV fields alone does not prevent spreadsheets from evaluating formulas.
-  if (typeof value === 'string' && /^(?:\s*[=+@-]|[\t\r\n])/.test(value)) {
+  if (typeof value === 'string' && spreadsheetFormulaPrefix.test(value)) {
     text = "'" + text;
   }
   return '"' + text.replace(/"/g, '""') + '"';
@@ -122,7 +123,9 @@ export class ProductExportService {
           fields.map(([field, read]) => [field, read(product)]),
         ),
       );
-      return Buffer.from(JSON.stringify({ products: rows }, null, 2));
+      return Buffer.from(
+        JSON.stringify({ format: 'catalog', products: rows }, null, 2),
+      );
     }
 
     const rows = products.map((product) =>

@@ -7,6 +7,7 @@ import { PrismaService } from '../prisma/prisma.service';
 import { ProductExportController } from './product-export.controller';
 import { ProductExportService } from './product-export.service';
 import { readProductImportFile } from './product-import.file';
+import { parseProductImport } from './product-import.parser';
 import { readImportWorkbook } from './product-import.xlsx';
 
 // Load the real sanitizer through Node because Jest 29 cannot require its ESM parser.
@@ -34,6 +35,14 @@ const product = {
     },
   ],
   gtin: '0123456789012',
+  primaryMaterial: 'Oak',
+  secondaryMaterials: ['Ash; birch'],
+  width: new Prisma.Decimal('30.25'),
+  seatingCapacity: 0,
+  handmade: false,
+  assemblyRequired: false,
+  story: "'=written as text",
+  creationDate: createdAt,
   locale: 'uk',
   isPublished: false,
   productionTimeMinDays: null,
@@ -45,12 +54,17 @@ const product = {
 describe('product export', () => {
   let app: INestApplication;
   let service: ProductExportService;
-  const findMany = jest
-    .fn()
-    .mockResolvedValue([
-      product,
-      { ...product, id: 'legacy-id', sku: null, images: [] },
-    ]);
+  const findMany = jest.fn().mockResolvedValue([
+    product,
+    {
+      ...product,
+      id: '04043413-f0a1-4c99-b540-316ad88289c9',
+      sku: null,
+      locale: null,
+      description: null,
+      images: [],
+    },
+  ]);
 
   beforeAll(async () => {
     const module = await Test.createTestingModule({
@@ -112,7 +126,11 @@ describe('product export', () => {
         image_details: product.images,
         translations: product.translations,
       },
-      { product_id: 'legacy-id', sku: null, images: [] },
+      {
+        product_id: '04043413-f0a1-4c99-b540-316ad88289c9',
+        sku: null,
+        images: [],
+      },
     ]);
     expect(findMany.mock.calls.at(-1)[0]).not.toHaveProperty('where');
   });
@@ -136,10 +154,49 @@ describe('product export', () => {
       format: 'catalog',
       products: [
         { sku: '00012', images: [product.images[0].url] },
-        { product_id: 'legacy-id', images: [] },
+        { product_id: '04043413-f0a1-4c99-b540-316ad88289c9', images: [] },
       ],
     });
   });
+
+  it.each(['json', 'xlsx', 'csv'] as const)(
+    'round-trips editable %s fields and a product without a SKU',
+    async (format) => {
+      const file = {
+        originalname: 'products.' + format,
+        buffer: await service.export(format),
+      } as Express.Multer.File;
+      const result = parseProductImport(await readProductImportFile(file, {}));
+      expect(result.errors).toEqual([]);
+      expect(result.products[0].data).toMatchObject({
+        sku: '00012',
+        title: product.title,
+        locale: 'uk',
+        gtin: product.gtin,
+        primaryMaterial: product.primaryMaterial,
+        secondaryMaterials: product.secondaryMaterials,
+        width: product.width.toFixed(2),
+        seatingCapacity: 0,
+        handmade: false,
+        assemblyRequired: false,
+        story: product.story,
+        creationDate: createdAt,
+        translations: product.translations,
+      });
+      expect(new Prisma.Decimal(String(result.products[0].data.price))).toEqual(
+        product.price,
+      );
+      const { url, ...imageDetails } = product.images[0];
+      expect(result.products[0].imageDetails.get(url)).toEqual(imageDetails);
+      expect(result.products[1].data).toMatchObject({
+        id: '04043413-f0a1-4c99-b540-316ad88289c9',
+        locale: null,
+        description: null,
+      });
+      expect(result.products[1].data.sku).toBeUndefined();
+      expect(result.products[1].images).toEqual([]);
+    },
+  );
 
   it('writes a real workbook with text identifiers, numeric prices and no live formulas', async () => {
     const buffer = await service.export('xlsx');

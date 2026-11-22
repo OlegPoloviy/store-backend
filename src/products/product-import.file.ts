@@ -12,6 +12,7 @@ import {
 } from './product-import.parser';
 import { readImportXml, XmlElement } from './product-import.xml';
 import { MAX_IMPORT_COLUMNS, readImportWorkbook } from './product-import.xlsx';
+import { spreadsheetFormulaPrefix } from './product-catalog-fields';
 
 const {
   parse,
@@ -29,7 +30,7 @@ const {
 } = createRequire(__filename)('csv-parse/sync');
 
 const googleNamespace = 'http://base.google.com/ns/1.0';
-type Row = Record<string, string | string[]>;
+type Row = Record<string, string | string[] | null>;
 type ImportRows = { format: ImportFormat; products: Row[] };
 
 export async function readProductImportFile(
@@ -58,7 +59,10 @@ export async function readProductImportFile(
   switch (extension) {
     case '.csv':
     case '.tsv':
-      rows = tableRows(readDelimited(utf8(file.buffer), extension === '.tsv'));
+      rows = tableRows(
+        readDelimited(utf8(file.buffer), extension === '.tsv'),
+        extension === '.csv',
+      );
       break;
     case '.xlsx':
       rows = tableRows(await readImportWorkbook(file.buffer));
@@ -136,19 +140,21 @@ function readDelimited(text: string, tsv: boolean) {
   }
 }
 
-function tableRows([header, ...rows]: string[][]): ImportRows {
+function tableRows([header, ...rows]: string[][], csv = false): ImportRows {
   if (!header) return { format: 'catalog', products: [] };
   if (rows.length > MAX_PRODUCTS) {
     throw new BadRequestException('A batch may contain up to 500 products');
   }
   const keys = Array.from(header, (value) => value?.trim());
   const named = keys.filter(Boolean);
+  const catalogExport =
+    named.includes('product_id') && named.includes('image_details');
   if (!named.length || named.length !== new Set(named).size) {
     throw new BadRequestException('The table needs unique column headers');
   }
   let size = 0;
   const products = rows.map((row) => {
-    const entries: [string, string | string[]][] = [];
+    const entries: [string, string | string[] | null][] = [];
     for (const [index, value] of row.entries()) {
       if (!value) continue;
       const key = keys[index];
@@ -164,8 +170,19 @@ function tableRows([header, ...rows]: string[][]): ImportRows {
         key,
         /^(?:images|(?:g:)?additional_image_link)$/.test(key)
           ? imageList(value)
-          : value,
+          : csv &&
+              catalogExport &&
+              value.startsWith("'") &&
+              spreadsheetFormulaPrefix.test(value)
+            ? value.slice(1)
+            : value,
       ]);
+    }
+    if (catalogExport) {
+      const populated = new Set(entries.map(([key]) => key));
+      for (const key of named) {
+        if (!populated.has(key)) entries.push([key, null]);
+      }
     }
     return Object.fromEntries(entries);
   });

@@ -44,6 +44,7 @@ model Product {
   slug                  String?
   link                  String?
   originalPrice         Decimal?        @db.Decimal(10, 2)
+  convertedPrices       Json?
   translations          Json?
   isPublished           Boolean         @default(true)
   availability          ProductAvailability?

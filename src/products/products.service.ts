@@ -9,6 +9,7 @@ import { UpdateProductDTO } from '../DTO/update-product.dto';
 import { DmsService } from 'src/dms/dms.service';
 import type { Express } from 'express';
 import { Prisma } from 'generated/prisma';
+import { getEstimatedDispatch } from './product-dispatch';
 
 const catalogImages = {
   orderBy: [
@@ -126,6 +127,7 @@ export class ProductsService {
           })),
         },
       };
+      delete productData.convertedPrices;
 
       const createdProduct = await this.prisma.product.create({
         data: productData,
@@ -171,6 +173,15 @@ export class ProductsService {
       const productData: Prisma.ProductUpdateInput = Object.fromEntries(
         Object.entries(rest).filter(([, value]) => value !== undefined),
       );
+      delete productData.convertedPrices;
+      if (
+        product.convertedPrices &&
+        ((data.price !== undefined && !product.price.equals(data.price)) ||
+          (data.currency !== undefined && data.currency !== product.currency) ||
+          productData.originalPrice !== undefined)
+      ) {
+        productData.convertedPrices = Prisma.DbNull;
+      }
 
       if (rest.primaryMaterial === undefined && material !== undefined) {
         productData.primaryMaterial = material;
@@ -305,6 +316,7 @@ export class ProductsService {
       return {
         ...rest,
         isFavorite,
+        estimatedDispatch: getEstimatedDispatch(product),
       };
     } catch (error) {
       console.error(error);

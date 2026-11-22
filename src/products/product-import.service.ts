@@ -5,10 +5,23 @@ import {
 } from '@nestjs/common';
 import { Prisma } from 'generated/prisma';
 import { PrismaService } from '../prisma/prisma.service';
+import { previewProductImport } from './product-import-preview';
+import {
+  findImportImages,
+  getImportImageMetadata,
+  getImportInsertValue,
+  getImportUpdateValue,
+  importTranslationUpdate,
+  productImportColumn,
+  productImportColumns,
+} from './product-import-values';
 import {
   type ImportProduct,
   parseProductImport,
 } from './product-import.parser';
+import { ProductImportCurrencyService } from './product-import-currency.service';
+
+export type ProductImportCurrencyOptions = { enabled: boolean; token?: string };
 
 export type ProductImportProgress = {
   phase: 'validating' | 'writing' | 'committing';
@@ -17,50 +30,48 @@ export type ProductImportProgress = {
 };
 
 const WRITE_GROUP_SIZE = 50;
-const UPDATE_FIELDS = [
-  'title',
-  'description',
-  'price',
-  'currency',
-  'locale',
-  'slug',
-  'link',
-  'color',
-  'brand',
-  'originalPrice',
-  'isPublished',
-  'availability',
-  'availabilityDate',
-  'gtin',
-  'mpn',
-  'identifierExists',
-  'isMadeToOrder',
-  'productionTimeMinDays',
-  'productionTimeMaxDays',
-  'productionDayType',
-  'categoryId',
-] as const satisfies readonly (keyof ImportProduct['data'] | 'categoryId')[];
 
-function column(field: (typeof UPDATE_FIELDS)[number]) {
-  return Prisma.raw('"' + field + '"');
+function productKey(data: ImportProduct['data']) {
+  return data.sku == null ? 'id:' + data.id : 'sku:' + data.sku;
 }
 
 @Injectable()
 export class ProductImportService {
-  constructor(private readonly prisma: PrismaService) {}
+  constructor(
+    private readonly prisma: PrismaService,
+    private readonly currency: ProductImportCurrencyService,
+  ) {}
 
   async import(
     payload: unknown,
     onProgress?: (progress: ProductImportProgress) => void,
+    options?: ProductImportCurrencyOptions,
   ) {
     const { products, warnings, errors, total, dryRun, format } =
       parseProductImport(payload, (processed, total) =>
         onProgress?.({ phase: 'validating', processed, total }),
       );
-    const report = { total, valid: products.length, dryRun, errors, warnings };
+    const conversion =
+      options?.enabled && !errors.length
+        ? await this.currency.convert(products, format, dryRun, options.token)
+        : undefined;
+    for (const product of products) {
+      const prices = conversion?.pricesByRow.get(product.row);
+      if (prices) product.data.convertedPrices = prices;
+    }
+    const report = {
+      total,
+      valid: products.length,
+      dryRun,
+      errors,
+      warnings,
+      conversion: conversion?.report,
+    };
 
-    if (errors.length || dryRun) {
-      return { ...report, imported: 0 };
+    if (errors.length) return { ...report, imported: 0 };
+    if (dryRun) {
+      const preview = await previewProductImport(this.prisma, products);
+      return { ...report, imported: 0, preview };
     }
 
     onProgress?.({ phase: 'writing', processed: 0, total });
@@ -83,18 +94,33 @@ export class ProductImportService {
             ).map(({ id, name }) => [name, id]),
           );
 
-          // All import requests acquire product locks in the same SKU order.
-          products.sort((a, b) => (a.data.sku < b.data.sku ? -1 : 1));
+          // All import requests acquire product locks in the same order.
+          products.sort((a, b) =>
+            productKey(a.data) < productKey(b.data) ? -1 : 1,
+          );
           for (
             let offset = 0;
             offset < products.length;
             offset += WRITE_GROUP_SIZE
           ) {
             const group = products.slice(offset, offset + WRITE_GROUP_SIZE);
-            const ids = await this.upsertProducts(tx, group, categories);
+            const ids = new Map([
+              ...(await this.upsertProducts(
+                tx,
+                group.filter(({ data }) => data.sku != null),
+                categories,
+                'sku',
+              )),
+              ...(await this.upsertProducts(
+                tx,
+                group.filter(({ data }) => data.sku == null),
+                categories,
+                'id',
+              )),
+            ]);
 
             const sources = group.map(({ data, source }) => ({
-              productId: ids.get(data.sku),
+              productId: ids.get(productKey(data)),
               format,
               data: source,
             }));
@@ -139,56 +165,45 @@ export class ProductImportService {
     tx: Prisma.TransactionClient,
     group: ImportProduct[],
     categories: Map<string, string>,
+    identity: 'sku' | 'id',
   ) {
+    if (!group.length) return new Map<string, string>();
+    const conflictColumn = Prisma.raw(identity);
     const values = group.map(({ data, category }) => ({
       ...data,
       categoryId: categories.get(category),
     }));
     const suppliedFields = JSON.stringify(
-      Object.fromEntries(values.map(({ sku, ...fields }) => [sku, fields])),
+      Object.fromEntries(
+        values.map(({ sku, id, ...fields }) => [sku ?? id, fields]),
+      ),
     );
 
-    const update = UPDATE_FIELDS.map(
+    const supplied = Prisma.sql`((SELECT fields FROM supplied) -> EXCLUDED.${conflictColumn})`;
+    const update = productImportColumns.map(
       (field) => Prisma.sql`
-      ${column(field)} = CASE
-        WHEN ((SELECT fields FROM supplied) -> EXCLUDED.sku) ? ${field}
-        THEN EXCLUDED.${column(field)} ELSE "Product".${column(field)}
-      END
+      ${productImportColumn(field)} = ${getImportUpdateValue(field, supplied)}
     `,
     );
-    const insert = UPDATE_FIELDS.map((field) => {
-      switch (field) {
-        case 'brand':
-          return Prisma.sql`COALESCE(p."brand", 'KarpatMaster')`;
-        case 'isPublished':
-          return Prisma.sql`COALESCE(p."isPublished", true)`;
-        case 'isMadeToOrder':
-          return Prisma.sql`COALESCE(p."isMadeToOrder", false)`;
-        default:
-          return Prisma.sql`p.${column(field)}`;
-      }
-    });
+    const insert = productImportColumns.map(getImportInsertValue);
     // The JSON key test preserves omitted values while allowing explicit nulls.
     const saved = await tx.$queryRaw<{ id: string; sku: string }[]>`
       WITH supplied AS (SELECT ${suppliedFields}::jsonb AS fields)
-      INSERT INTO "Product" (id, sku, ${Prisma.join(UPDATE_FIELDS.map(column))},
-        translations, "createdAt", "updatedAt",
-        "secondaryMaterials", "craftsmanshipDetails", features)
-      SELECT gen_random_uuid()::text, p.sku, ${Prisma.join(insert)},
-        p.translations, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP,
-        ARRAY[]::text[], ARRAY[]::text[], ARRAY[]::text[]
+      INSERT INTO "Product" (id, sku, ${Prisma.join(productImportColumns.map(productImportColumn))},
+        translations, "createdAt", "updatedAt")
+      SELECT COALESCE(p.id, gen_random_uuid()::text), p.sku, ${Prisma.join(insert)},
+        p.translations, CURRENT_TIMESTAMP, CURRENT_TIMESTAMP
       FROM jsonb_array_elements(${JSON.stringify(values)}::jsonb) WITH ORDINALITY AS input(data, ordinal)
       CROSS JOIN LATERAL jsonb_populate_record(NULL::"Product", input.data) AS p
       ORDER BY input.ordinal
-      ON CONFLICT (sku) DO UPDATE SET ${Prisma.join(update)},
+      ON CONFLICT (${conflictColumn}) DO UPDATE SET ${Prisma.join(update)},
         "updatedAt" = CURRENT_TIMESTAMP,
-        translations = COALESCE("Product".translations, '{}'::jsonb) || (
-          SELECT jsonb_object_agg(locale, COALESCE("Product".translations -> locale, '{}'::jsonb) || translation)
-          FROM jsonb_each(EXCLUDED.translations) AS t(locale, translation)
-        )
+        translations = ${importTranslationUpdate}
       RETURNING id, sku
     `;
-    return new Map(saved.map(({ sku, id }) => [sku, id]));
+    return new Map(
+      saved.map((row) => [identity + ':' + row[identity], row.id]),
+    );
   }
 
   private async syncImages(
@@ -196,17 +211,7 @@ export class ProductImportService {
     group: ImportProduct[],
     ids: Map<string, string>,
   ) {
-    const existingImages = await tx.productImage.findMany({
-      where: { productId: { in: [...ids.values()] } },
-      orderBy: [{ managed: 'desc' }, { createdAt: 'asc' }, { id: 'asc' }],
-      select: {
-        id: true,
-        productId: true,
-        url: true,
-        position: true,
-        isMain: true,
-      },
-    });
+    const existingImages = await findImportImages(tx, [...ids.values()]);
     const imagesByProduct = new Map<
       string,
       Map<string, (typeof existingImages)[number]>
@@ -223,16 +228,31 @@ export class ProductImportService {
     }
 
     const create: Prisma.ProductImageCreateManyInput[] = [];
-    const update: { id: string; position: number; isMain: boolean }[] = [];
-    for (const { data, images } of group) {
-      const productId = ids.get(data.sku);
-      for (const [position, url] of images.entries()) {
-        const isMain = position === 0;
+    const update: {
+      id: string;
+      position: number;
+      isMain: boolean;
+      altText: string | null;
+    }[] = [];
+    for (const product of group) {
+      const { data, images } = product;
+      const productId = ids.get(productKey(data));
+      for (const [index, url] of images.entries()) {
         const existing = imagesByProduct.get(productId)?.get(url);
+        const { position, isMain, altText } = getImportImageMetadata(
+          product,
+          url,
+          index,
+          existing,
+        );
         if (existing) {
           staleIds.delete(existing.id);
-          if (existing.position !== position || existing.isMain !== isMain) {
-            update.push({ id: existing.id, position, isMain });
+          if (
+            existing.position !== position ||
+            existing.isMain !== isMain ||
+            existing.altText !== altText
+          ) {
+            update.push({ id: existing.id, position, isMain, altText });
           }
         } else {
           create.push({
@@ -240,7 +260,7 @@ export class ProductImportService {
             position,
             isMain,
             productId,
-            altText: data.title,
+            altText,
             managed: false,
           });
         }
@@ -254,9 +274,9 @@ export class ProductImportService {
     if (update.length) {
       await tx.$executeRaw`
         UPDATE "ProductImage" AS image
-        SET position = patch.position, "isMain" = patch."isMain"
+        SET position = patch.position, "isMain" = patch."isMain", "altText" = patch."altText"
         FROM jsonb_to_recordset(${JSON.stringify(update)}::jsonb)
-          AS patch(id text, position integer, "isMain" boolean)
+          AS patch(id text, position integer, "isMain" boolean, "altText" text)
         WHERE image.id = patch.id
       `;
     }

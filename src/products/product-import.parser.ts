@@ -6,6 +6,12 @@ import {
 } from 'generated/prisma';
 // eslint-disable-next-line @typescript-eslint/no-require-imports -- Keep the callable CommonJS export.
 import sanitizeHtml = require('sanitize-html');
+import { DEFAULT_PRODUCTION_TIME } from './product-dispatch';
+import {
+  catalogDecimalFields,
+  catalogListFields,
+  catalogTextFields,
+} from './product-catalog-fields';
 
 export const MAX_IMPORT_BYTES = 5 * 1024 * 1024;
 export const MAX_PRODUCTS = 500;
@@ -20,11 +26,14 @@ export type ImportProduct = {
     Prisma.ProductUncheckedCreateInput,
     'categoryId' | 'translations'
   > & {
-    sku: string;
-    translations: Record<string, Translation>;
+    translations?: Record<string, Translation>;
   };
   category: string;
   images: string[];
+  imageDetails: Map<
+    string,
+    { altText: string | null; position: number; isMain: boolean }
+  >;
   source: Prisma.InputJsonObject;
 };
 
@@ -43,6 +52,130 @@ function record(value: unknown): value is Row {
 
 function missing(value: unknown): value is null | undefined | '' {
   return value === undefined || value === null || value === '';
+}
+
+function fromTableJson(value: unknown, field: string) {
+  if (typeof value !== 'string' || value === '') return value;
+  let parsed: unknown;
+  try {
+    parsed = JSON.parse(value);
+  } catch {
+    throw new Error(field + ' must contain valid JSON');
+  }
+  validateSource(parsed);
+  return parsed;
+}
+
+function nullable<T>(value: unknown, parse: (value: unknown) => T) {
+  return value === null ? null : missing(value) ? undefined : parse(value);
+}
+
+function integer(value: unknown, field: string) {
+  const number =
+    typeof value === 'string' && /^\d+$/.test(value) ? Number(value) : value;
+  if (
+    typeof number !== 'number' ||
+    !Number.isInteger(number) ||
+    number < 0 ||
+    number > 2_147_483_647
+  ) {
+    throw new Error(field + ' must be a non-negative integer');
+  }
+  return number;
+}
+
+function date(value: unknown, field: string) {
+  const text = scalar(value, field);
+  if (
+    !/^\d{4}-\d\d-\d\dT.*(?:Z|[+-]\d\d:\d\d)$/.test(text) ||
+    !Number.isFinite(Date.parse(text))
+  ) {
+    throw new Error(field + ' must be an ISO 8601 timestamp');
+  }
+  return new Date(text);
+}
+
+function catalogDetails(row: Row) {
+  const text = Object.entries(catalogTextFields).map(([field, key]) => [
+    key,
+    nullable(row[field], (value) =>
+      scalar(
+        value,
+        field,
+        field === 'unit_of_measure' || field === 'weight_unit' ? 10 : 100_000,
+      ),
+    ),
+  ]);
+  const lists = Object.entries(catalogListFields).map(([field, key]) => {
+    const value = fromTableJson(row[field], field);
+    if (missing(value)) return [key, value === null ? [] : undefined];
+    if (!Array.isArray(value))
+      throw new Error(field + ' must be an array of text values');
+    return [key, value.map((item: unknown) => scalar(item, field, 2000))];
+  });
+  return {
+    ...Object.fromEntries([
+      ...text,
+      ...lists,
+      ...catalogDecimalFields.map((key) => [
+        key,
+        nullable(row[key], (value) => price(value, key)),
+      ]),
+    ]),
+    handmade: optionalBoolean(row.handmade, 'handmade'),
+    assemblyRequired: nullable(row.assembly_required, (value) =>
+      boolean(value, 'assembly_required'),
+    ),
+    seatingCapacity: nullable(row.seating_capacity, (value) =>
+      integer(value, 'seating_capacity'),
+    ),
+    creationDate: nullable(row.creation_date, (value) =>
+      date(value, 'creation_date'),
+    ),
+  };
+}
+
+function catalogTranslations(value: unknown) {
+  const entries = fromTableJson(value, 'translations');
+  if (missing(entries)) return {};
+  if (!record(entries)) throw new Error('translations must be an object');
+  return Object.fromEntries(
+    Object.entries(entries).map(([tag, copy]) => {
+      if (!record(copy)) throw new Error('Each translation must be an object');
+      return [
+        locale(tag),
+        {
+          title: optionalText(copy.title, 'translation title', 500),
+          description: missing(copy.description)
+            ? undefined
+            : description(copy.description),
+        },
+      ];
+    }),
+  ) as Record<string, Translation>;
+}
+
+function catalogImageDetails(value: unknown) {
+  const details = fromTableJson(value, 'image_details');
+  const result: ImportProduct['imageDetails'] = new Map();
+  if (missing(details)) return result;
+  if (!Array.isArray(details) || details.length > 50)
+    throw new Error('image_details must contain up to 50 images');
+  for (const image of details) {
+    if (!record(image)) throw new Error('Each image detail must be an object');
+    const address = url(image.url, 'image_details URL');
+    result.set(address, {
+      altText:
+        optionalText(image.altText, 'image_details altText', 2000) ?? null,
+      isMain: boolean(image.isMain, 'image_details isMain'),
+      position: integer(image.position, 'image_details position'),
+    });
+  }
+  return result;
+}
+
+function isCatalogExport(row: Row) {
+  return !missing(row.product_id) && 'locale' in row;
 }
 
 function scalar(value: unknown, field: string, limit = 255): string {
@@ -318,18 +451,28 @@ function importRow(
   index: number,
   warnings: ImportIssue[],
 ): ImportProduct {
-  const sku = scalar(row.sku ?? row.id, 'sku', 50);
+  const exported = format === 'catalog' && isCatalogExport(row);
+  const sku = exported
+    ? optionalText(row.sku, 'sku', 50)
+    : scalar(row.sku ?? row.id, 'sku', 50);
+  const id =
+    exported && !sku ? scalar(row.product_id, 'product_id') : undefined;
+  if (id && !/^[a-f0-9]{8}(?:-[a-f0-9]{4}){3}-[a-f0-9]{12}$/i.test(id)) {
+    throw new Error('product_id must be a UUID when SKU is missing');
+  }
   const currency = scalar(row.currency, 'currency', 3).toUpperCase();
   if (!/^[A-Z]{3}$/.test(currency))
     throw new Error('currency must be a three-letter code');
   const title = scalar(row.title, 'title', 500);
   const productDescription =
-    format === 'horoshop'
-      ? scalar(row.description, 'description', 100_000)
-      : description(row.description);
+    exported && missing(row.description)
+      ? null
+      : format === 'horoshop'
+        ? scalar(row.description, 'description', 100_000)
+        : description(row.description);
   if (
     !Array.isArray(row.images) ||
-    !row.images.length ||
+    (!row.images.length && !exported) ||
     row.images.length > 50
   ) {
     throw new Error('images must contain between 1 and 50 URLs');
@@ -346,8 +489,12 @@ function importRow(
   if (madeToOrder && !production) {
     const message =
       'Set production_time_days and production_day_type for made-to-order products';
-    if (format === 'catalog') throw new Error(message);
-    warnings.push({ row: index, sku, message });
+    if (format === 'catalog' && !exported) throw new Error(message);
+    warnings.push({
+      row: index,
+      sku,
+      message: `No production time supplied. An existing production time is kept, otherwise ${DEFAULT_PRODUCTION_TIME.productionTimeMaxDays} business days are used.`,
+    });
   }
 
   const availability = optionalText(row.availability, 'availability');
@@ -398,23 +545,39 @@ function importRow(
       'Google Shopping requires link and availability, plus availability_date for preorder/backorder',
     );
   }
-  const translations = (
-    format === 'horoshop' ? row.translations : {}
-  ) as Record<string, Translation>;
-  translations[language] = { title, description: productDescription };
+  const rowLocale =
+    format === 'catalog' && row.locale !== undefined
+      ? missing(row.locale)
+        ? null
+        : locale(row.locale)
+      : language;
+  const translations =
+    format === 'horoshop'
+      ? (row.translations as Record<string, Translation>)
+      : catalogTranslations(
+          format === 'catalog' ? row.translations : undefined,
+        );
+  if (rowLocale) {
+    translations[rowLocale] = {
+      title,
+      description: productDescription ?? undefined,
+      ...translations[rowLocale],
+    };
+  }
   return {
     row: index,
     data: {
       sku,
+      id,
       title,
       description: productDescription,
       price: price(row.price, 'price'),
       currency,
-      locale: language,
-      translations,
-      slug: optionalText(row.slug, 'slug'),
-      link: missing(row.link) ? undefined : url(row.link, 'link'),
-      color: optionalText(row.color, 'color'),
+      locale: rowLocale,
+      translations: Object.keys(translations).length ? translations : undefined,
+      slug: nullable(row.slug, (value) => scalar(value, 'slug')),
+      link: nullable(row.link, (value) => url(value, 'link')),
+      color: nullable(row.color, (value) => scalar(value, 'color')),
       brand: optionalText(row.brand, 'brand', 70),
       originalPrice: missing(row.original_price)
         ? row.original_price === null
@@ -429,12 +592,17 @@ function importRow(
           : undefined,
       availabilityDate: availabilityDate
         ? new Date(availabilityDate)
-        : availability || row.availability === null
+        : availability ||
+            row.availability === null ||
+            row.availability_date === null
           ? null
           : undefined,
-      gtin,
-      mpn,
-      identifierExists: identifierExists ?? (gtin || mpn ? true : undefined),
+      gtin: row.gtin === null ? null : gtin,
+      mpn: row.mpn === null ? null : mpn,
+      identifierExists:
+        row.identifier_exists === null
+          ? null
+          : (identifierExists ?? (gtin || mpn ? true : undefined)),
       isMadeToOrder: madeToOrder,
       ...production,
       ...(madeToOrder === false && {
@@ -442,9 +610,13 @@ function importRow(
         productionTimeMaxDays: null,
         productionDayType: null,
       }),
+      ...(format === 'catalog' ? catalogDetails(row) : {}),
     },
     category: scalar(row.category, 'category', 750),
     images,
+    imageDetails: catalogImageDetails(
+      format === 'catalog' ? row.image_details : undefined,
+    ),
     source: source as Prisma.InputJsonObject,
   };
 }
@@ -467,14 +639,6 @@ export function parseProductImport(
   if (payload.dryRun !== undefined && typeof payload.dryRun !== 'boolean') {
     throw new BadRequestException('dryRun must be a boolean');
   }
-  let language: string;
-  try {
-    language = locale(payload.locale);
-  } catch {
-    throw new BadRequestException(
-      'Provide a valid locale, e.g. en, en-GB or uk',
-    );
-  }
   if (
     !Array.isArray(payload.products) ||
     !payload.products.length ||
@@ -482,6 +646,22 @@ export function parseProductImport(
   ) {
     throw new BadRequestException(
       'products must contain between 1 and ' + MAX_PRODUCTS + ' rows',
+    );
+  }
+  let language: string;
+  try {
+    if (
+      !(
+        format === 'catalog' &&
+        missing(payload.locale) &&
+        payload.products.every((row) => record(row) && isCatalogExport(row))
+      )
+    ) {
+      language = locale(payload.locale);
+    }
+  } catch {
+    throw new BadRequestException(
+      'Provide a valid locale, e.g. en, en-GB or uk',
     );
   }
 
@@ -516,10 +696,16 @@ export function parseProductImport(
         rowWarnings,
       );
       sku = product.data.sku;
-      const first = seen.get(sku);
+      const key = sku ? 'sku:' + sku : 'id:' + product.data.id;
+      const first = seen.get(key);
       if (first !== undefined)
-        throw new Error('Duplicate SKU already present in row ' + first);
-      seen.set(sku, index);
+        throw new Error(
+          'Duplicate ' +
+            (sku ? 'SKU' : 'product_id') +
+            ' already present in row ' +
+            first,
+        );
+      seen.set(key, index);
       products.push(product);
       warnings.push(...rowWarnings);
     } catch (error) {
@@ -533,7 +719,7 @@ export function parseProductImport(
     errors,
     total,
     dryRun: payload.dryRun === true,
-    format,
+    format: format as ImportFormat,
   };
 }
 

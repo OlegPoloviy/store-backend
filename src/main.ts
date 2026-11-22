@@ -1,12 +1,12 @@
 import { NestFactory } from '@nestjs/core';
 import { AppModule } from './app.module';
 import { ValidationPipe } from '@nestjs/common';
-import { json } from 'express';
-import { MAX_IMPORT_BYTES } from './products/product-import.parser';
+import type { NestExpressApplication } from '@nestjs/platform-express';
+import { configureBodyParsers } from './http-body-parsers';
 
 async function bootstrap() {
-  const app = await NestFactory.create(AppModule);
-  app.use('/products/import', json({ limit: MAX_IMPORT_BYTES }));
+  const app = await NestFactory.create<NestExpressApplication>(AppModule);
+  configureBodyParsers(app);
 
   if (
     process.env.PAYMENT_MODE === 'mock' &&

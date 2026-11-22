@@ -7,6 +7,9 @@ import { ProductImportController } from './product-import.controller';
 import { ProductImportService } from './product-import.service';
 import { ProductExportController } from './product-export.controller';
 import { ProductExportService } from './product-export.service';
+import { GoogleShoppingController } from './google-shopping.controller';
+import { GoogleShoppingService } from './google-shopping.service';
+import { ProductImportCurrencyService } from './product-import-currency.service';
 
 @Module({
   imports: [PrismaModule, DmsModule],
@@ -14,7 +17,14 @@ import { ProductExportService } from './product-export.service';
     ProductsController,
     ProductImportController,
     ProductExportController,
+    GoogleShoppingController,
   ],
-  providers: [ProductsService, ProductImportService, ProductExportService],
+  providers: [
+    ProductsService,
+    ProductImportService,
+    ProductImportCurrencyService,
+    ProductExportService,
+    GoogleShoppingService,
+  ],
 })
 export class ProductsModule {}

@@ -22,6 +22,22 @@ describe('ProductsService', () => {
     );
   });
 
+  it('includes an estimated dispatch in the product detail response', async () => {
+    prisma.product.findUnique.mockResolvedValue({
+      ...product,
+      isMadeToOrder: true,
+    });
+
+    const result = await service.getProductById(product.id);
+
+    expect(result.estimatedDispatch?.earliestDate).toMatch(
+      /^\d{4}-\d{2}-\d{2}$/,
+    );
+    expect(result.estimatedDispatch?.latestDate).toBe(
+      result.estimatedDispatch?.earliestDate,
+    );
+  });
+
   it('maps categoryId and material when replacing images', async () => {
     await service.updateProduct(product.id, {
       title: product.title,
